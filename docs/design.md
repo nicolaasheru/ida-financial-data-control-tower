@@ -26,6 +26,53 @@ Isolation Forest is intentionally lightweight and suitable for mostly unlabeled
 data. It is not treated as an autonomous decision-maker. Rules retain precedence,
 and every model alert is routed to human review.
 
+Four independent Isolation Forest models are fit:
+
+1. annual commitments;
+2. annual gross disbursements;
+3. quarterly commitments; and
+4. quarterly gross disbursements.
+
+This prevents different reporting cadences and financial meanings from competing
+inside one anomaly distribution. Regional and institutional aggregate rows are
+retained for rule-based reconciliation but excluded from the country ML models.
+Aggregate reconciliation signals are kept visible but downgraded from critical
+until their reporting semantics are confirmed; they must not outrank corroborated
+country-level alerts merely because aggregate components follow a different
+presentation.
+The initial contamination assumption remains 2% within each segment and must be
+recalibrated from manual-review evidence.
+
+## Financial interpretation
+
+The ratio is:
+
+`gross disbursements / absolute commitments`
+
+It is only calculated when commitments are at least USD 10 million. The threshold
+is a stability floor for the denominator, not a statement that smaller operations
+are unimportant.
+
+Materiality percentiles compare a record only with peers in the same period type,
+category, and entity type. Dollar bands are prioritization aids and are not WBG
+policy thresholds.
+
+The ML evidence lists the largest normalized feature deviations. These values help
+an analyst orient the review, but they are not causal feature contributions.
+
+## Severity and corroboration
+
+- A standalone ML signal is medium, or high only when both its anomaly score and
+  materiality percentile are elevated. It is never critical by itself.
+- Agreement by at least two detector families elevates a medium case to high.
+- A high case becomes critical only when detector families agree and materiality
+  is in the top quartile.
+- Deterministic critical controls, such as failed reconciliation or duplicate
+  reporting grain, remain critical.
+
+Detector signals are preserved separately from the consolidated analyst queue so
+the evidence trail remains auditable.
+
 ## Evaluation plan
 
 Because the public source has no anomaly labels, evaluation will use:

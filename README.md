@@ -32,6 +32,20 @@ claim access to internal World Bank systems.
 5. **Explainability:** every alert includes severity, reason codes, evidence,
    and a recommended analyst action.
 
+## Financial calibration
+
+- Annual and quarterly observations are modeled separately.
+- Commitments and gross disbursements are modeled separately.
+- Country records are separated from regional and institutional aggregates;
+  only countries enter the current statistical and ML detectors.
+- Disbursement-to-commitment ratios are suppressed when commitments are below
+  USD 10 million, because a tiny denominator can create a misleadingly large
+  ratio. This is a prototype calibration assumption, not WBG policy.
+- ML-only alerts cannot be critical. Severity rises when independent detector
+  families agree and the record is financially material.
+- The analyst queue displays current, prior-period, and comparable prior-year
+  amounts rather than presenting a score without financial context.
+
 ## Run
 
 ```bash
@@ -40,7 +54,27 @@ python -m src.pipeline
 
 Outputs are written to `artifacts/` and cleaned data to `data/processed/`.
 
-## Status
+Key outputs:
 
-Foundation build. Dashboard and cloud-oriented orchestration follow after the
-control pipeline and evaluation harness are stable.
+- `artifacts/alert_signals.csv`: one row per detector signal.
+- `artifacts/alerts.csv`: consolidated analyst queue, one row per source record.
+- `artifacts/manual_review_sample.csv`: a stratified review sample.
+- `artifacts/run_summary.json`: run-level volumes and severity distribution.
+
+Create the manual-review sample with:
+
+```bash
+python -m src.review
+```
+
+After entering review outcomes in the CSV, summarize false-positive behavior:
+
+```bash
+python -m src.review --summarize
+```
+
+## Current validation
+
+The controlled fault-injection harness tests known structural failures. The
+manual-review workflow estimates false-positive behavior on untouched alerts.
+No accuracy or precision claim is made before a reviewer labels that sample.

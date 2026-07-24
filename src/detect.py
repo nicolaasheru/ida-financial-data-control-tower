@@ -32,6 +32,8 @@ def detect_statistical(features: pd.DataFrame) -> pd.DataFrame:
     df = features.copy()
     absolute_yoy_change = (df["total"] - df["previous_year_total"]).abs()
     flagged = (
+        df["entity_type"].eq("country")
+        &
         df["previous_year_total"].abs().ge(20)
         & absolute_yoy_change.ge(100)
         & df["year_over_year_change"].abs().ge(2.5)
@@ -57,6 +59,10 @@ def detect_statistical(features: pd.DataFrame) -> pd.DataFrame:
                     "Confirm whether the shift reflects approved financing activity or a data issue."
                 ),
                 "anomaly_score": score,
+                "model_segment": (
+                    f"{df.at[idx, 'period_type']}|{df.at[idx, 'category']}|"
+                    f"{df.at[idx, 'entity_type']}"
+                ),
             }
         )
     return pd.DataFrame(rows)
@@ -66,55 +72,82 @@ def detect_isolation_forest(
     features: pd.DataFrame,
     contamination: float = 0.02,
     random_state: int = 42,
-) -> tuple[pd.DataFrame, Pipeline]:
-    df = features.copy()
-    model = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", RobustScaler()),
-            (
-                "detector",
-                IsolationForest(
-                    n_estimators=300,
-                    contamination=contamination,
-                    random_state=random_state,
-                ),
-            ),
-        ]
-    )
-    matrix = df[MODEL_FEATURES].replace([np.inf, -np.inf], np.nan)
-    predictions = model.fit_predict(matrix)
-    raw_scores = -model.decision_function(matrix)
-    normalized = (raw_scores - raw_scores.min()) / (
-        raw_scores.max() - raw_scores.min() + 1e-12
-    )
-
+) -> tuple[pd.DataFrame, dict[str, Pipeline]]:
+    country_records = features.loc[features["entity_type"].eq("country")].copy()
+    segment_columns = ["period_type", "category"]
     rows = []
-    for idx in df.index[predictions == -1]:
-        values = {
-            feature: df.at[idx, feature]
-            for feature in MODEL_FEATURES
-            if pd.notna(df.at[idx, feature])
-        }
-        largest = sorted(
-            values.items(),
-            key=lambda item: abs(float(item[1])),
-            reverse=True,
-        )[:3]
-        evidence = "; ".join(f"{name}={value:.3f}" for name, value in largest)
-        score = float(normalized[idx])
-        rows.append(
-            {
-                "row_id": int(df.at[idx, "row_id"]),
-                "severity": _severity(score),
-                "reason_code": "MULTIVARIATE_ANOMALY",
-                "detector": "isolation_forest",
-                "message": "Record has an unusual financial profile across multiple signals.",
-                "evidence": evidence,
-                "recommended_action": (
-                    "Review component mix, period changes, and supporting source records."
+    models: dict[str, Pipeline] = {}
+
+    for segment_values, segment in country_records.groupby(
+        segment_columns,
+        dropna=False,
+    ):
+        period_type, category = segment_values
+        segment_name = f"{period_type}|{category}|country"
+        if len(segment) < 30:
+            continue
+
+        model = Pipeline(
+            steps=[
+                ("imputer", SimpleImputer(strategy="median")),
+                ("scaler", RobustScaler()),
+                (
+                    "detector",
+                    IsolationForest(
+                        n_estimators=300,
+                        contamination=contamination,
+                        random_state=random_state,
+                    ),
                 ),
-                "anomaly_score": score,
-            }
+            ]
         )
-    return pd.DataFrame(rows), model
+        matrix = segment[MODEL_FEATURES].replace([np.inf, -np.inf], np.nan)
+        predictions = model.fit_predict(matrix)
+        raw_scores = -model.decision_function(matrix)
+        normalized = (raw_scores - raw_scores.min()) / (
+            raw_scores.max() - raw_scores.min() + 1e-12
+        )
+        transformed = model[:-1].transform(matrix)
+        models[segment_name] = model
+
+        flagged_positions = np.flatnonzero(predictions == -1)
+        for position in flagged_positions:
+            idx = segment.index[position]
+            normalized_deviations = {
+                feature: abs(float(transformed[position, feature_position]))
+                for feature_position, feature in enumerate(MODEL_FEATURES)
+            }
+            largest = sorted(
+                normalized_deviations.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            )[:3]
+            evidence = "; ".join(
+                f"{name} normalized_deviation={value:.2f}"
+                for name, value in largest
+            )
+            score = float(normalized[position])
+            materiality = float(segment.at[idx, "materiality_percentile"])
+            provisional_severity = (
+                "high" if score >= 0.85 and materiality >= 0.75 else "medium"
+            )
+            rows.append(
+                {
+                    "row_id": int(segment.at[idx, "row_id"]),
+                    "severity": provisional_severity,
+                    "reason_code": "MULTIVARIATE_ANOMALY",
+                    "detector": "isolation_forest",
+                    "message": (
+                        "Record has an unusual financial profile within its "
+                        "period-and-category peer segment."
+                    ),
+                    "evidence": evidence,
+                    "recommended_action": (
+                        "Review current versus prior values, financing mix, and "
+                        "supporting source records."
+                    ),
+                    "anomaly_score": score,
+                    "model_segment": segment_name,
+                }
+            )
+    return pd.DataFrame(rows), models

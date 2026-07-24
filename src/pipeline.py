@@ -12,6 +12,7 @@ from .config import (
     FEATURE_FILE,
     PROCESSED_DIR,
     RUN_SUMMARY_FILE,
+    SIGNAL_FILE,
 )
 from .detect import detect_isolation_forest, detect_statistical
 from .features import engineer_features
@@ -19,20 +20,142 @@ from .ingest import load_raw
 from .validate import validate_and_clean
 
 
-def _add_context(alerts: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
-    if alerts.empty:
-        return alerts
+CONTEXT_COLUMNS = [
+    "row_id",
+    "country",
+    "region",
+    "entity_type",
+    "category",
+    "period_type",
+    "time_period",
+    "total",
+    "previous_total",
+    "previous_year_total",
+    "absolute_change",
+    "relative_change",
+    "year_over_year_change",
+    "commitment_total",
+    "disbursement_total",
+    "ratio_denominator_eligible",
+    "disbursement_commitment_ratio",
+    "materiality_percentile",
+    "materiality_band",
+]
+
+SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+
+
+def _add_context(signals: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
+    if signals.empty:
+        return signals
     context = features[
-        [
-            "row_id",
-            "country",
-            "region",
-            "category",
-            "time_period",
-            "total",
-        ]
+        CONTEXT_COLUMNS
     ].drop_duplicates("row_id")
-    return alerts.merge(context, on="row_id", how="left")
+    enriched = signals.merge(context, on="row_id", how="inner")
+    enriched["current_amount_usd_m"] = enriched["total"]
+    enriched["comparison_amount_usd_m"] = enriched["previous_year_total"]
+    enriched["change_amount_usd_m"] = (
+        enriched["current_amount_usd_m"] - enriched["comparison_amount_usd_m"]
+    )
+    enriched["change_percent"] = enriched["year_over_year_change"]
+    aggregate_reconciliation = (
+        enriched["entity_type"].eq("aggregate_or_institution")
+        & enriched["reason_code"].eq("TOTAL_MISMATCH")
+    )
+    enriched.loc[aggregate_reconciliation, "severity"] = "medium"
+    enriched.loc[aggregate_reconciliation, "message"] = (
+        "Aggregate total does not reconcile to country-style financing components; "
+        "the aggregate reporting semantics may differ."
+    )
+    enriched.loc[aggregate_reconciliation, "recommended_action"] = (
+        "Confirm the aggregate definition before treating this as a data-quality error."
+    )
+    return enriched
+
+
+def _join_unique(series: pd.Series) -> str:
+    return " | ".join(dict.fromkeys(str(value) for value in series.dropna()))
+
+
+def _column(group: pd.DataFrame, name: str) -> pd.Series:
+    return group[name] if name in group else pd.Series(dtype="object")
+
+
+def _final_severity(group: pd.DataFrame) -> str:
+    base_rank = max(
+        (SEVERITY_RANK.get(value, 1) for value in group["severity"]),
+        default=1,
+    )
+    detectors = group["detector"].dropna().nunique()
+    materiality = group["materiality_percentile"].max()
+    has_critical_rule = bool(
+        (
+            group["detector"].eq("rule")
+            & group["severity"].eq("critical")
+        ).any()
+    )
+
+    if has_critical_rule:
+        return "critical"
+    if detectors >= 2:
+        if base_rank >= SEVERITY_RANK["high"] and materiality >= 0.75:
+            return "critical"
+        return "high"
+    return next(
+        severity
+        for severity, rank in SEVERITY_RANK.items()
+        if rank == base_rank
+    )
+
+
+def build_analyst_queue(signals: pd.DataFrame) -> pd.DataFrame:
+    if signals.empty:
+        return signals
+
+    records = []
+    for row_id, group in signals.groupby("row_id", sort=False):
+        first = group.iloc[0]
+        record = {
+            column: first.get(column)
+            for column in CONTEXT_COLUMNS
+            if column != "row_id"
+        }
+        record.update(
+            {
+                "row_id": int(row_id),
+                "severity": _final_severity(group),
+                "reason_codes": _join_unique(group["reason_code"]),
+                "detectors": _join_unique(group["detector"]),
+                "signal_count": int(len(group)),
+                "detector_count": int(group["detector"].dropna().nunique()),
+                "corroborated": bool(group["detector"].dropna().nunique() >= 2),
+                "anomaly_score": group["anomaly_score"].max(),
+                "model_segments": _join_unique(_column(group, "model_segment")),
+                "messages": _join_unique(_column(group, "message")),
+                "evidence": _join_unique(_column(group, "evidence")),
+                "recommended_actions": _join_unique(
+                    _column(group, "recommended_action")
+                ),
+                "current_amount_usd_m": first.get("current_amount_usd_m"),
+                "comparison_amount_usd_m": first.get("comparison_amount_usd_m"),
+                "change_amount_usd_m": first.get("change_amount_usd_m"),
+                "change_percent": first.get("change_percent"),
+                "review_status": "pending",
+                "review_outcome": "",
+                "reviewer": "",
+                "review_notes": "",
+                "reviewed_at": "",
+            }
+        )
+        records.append(record)
+
+    queue = pd.DataFrame(records)
+    queue["_rank"] = queue["severity"].map(SEVERITY_RANK).fillna(0)
+    return queue.sort_values(
+        ["_rank", "corroborated", "anomaly_score"],
+        ascending=[False, False, False],
+        na_position="last",
+    ).drop(columns="_rank")
 
 
 def run(refresh: bool = False) -> dict:
@@ -50,17 +173,13 @@ def run(refresh: bool = False) -> dict:
         for frame in [validation.alerts, statistical, machine_learning]
         if not frame.empty
     ]
-    alerts = pd.concat(frames, ignore_index=True, sort=False) if frames else pd.DataFrame()
-    alerts = _add_context(alerts, features)
-    if not alerts.empty:
-        rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-        alerts["_rank"] = alerts["severity"].map(rank).fillna(9)
-        alerts = alerts.sort_values(
-            ["_rank", "anomaly_score"], ascending=[True, False], na_position="last"
-        ).drop(columns="_rank")
+    signals = pd.concat(frames, ignore_index=True, sort=False) if frames else pd.DataFrame()
+    signals = _add_context(signals, features)
+    alerts = build_analyst_queue(signals)
 
     validation.clean.to_csv(CLEAN_FILE, index=False)
     features.to_csv(FEATURE_FILE, index=False)
+    signals.to_csv(SIGNAL_FILE, index=False)
     alerts.to_csv(ALERT_FILE, index=False)
 
     summary = {
@@ -69,12 +188,16 @@ def run(refresh: bool = False) -> dict:
         "ida_records": int(len(validation.clean)),
         "countries": int(validation.clean["country"].nunique()),
         "periods": int(validation.clean["time_period"].nunique()),
+        "detector_signals": int(len(signals)),
         "alerts": int(len(alerts)),
+        "corroborated_alerts": (
+            int(alerts["corroborated"].sum()) if not alerts.empty else 0
+        ),
         "alerts_by_severity": (
             alerts["severity"].value_counts().to_dict() if not alerts.empty else {}
         ),
         "alerts_by_detector": (
-            alerts["detector"].value_counts().to_dict() if not alerts.empty else {}
+            signals["detector"].value_counts().to_dict() if not signals.empty else {}
         ),
     }
     RUN_SUMMARY_FILE.write_text(json.dumps(summary, indent=2), encoding="utf-8")

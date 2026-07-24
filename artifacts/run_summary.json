@@ -1,18 +1,20 @@
 {
-  "run_timestamp_utc": "2026-07-24T15:51:15.923087+00:00",
+  "run_timestamp_utc": "2026-07-24T16:38:46.494929+00:00",
   "source_records": 3420,
   "ida_records": 3420,
   "countries": 202,
   "periods": 14,
-  "alerts": 183,
+  "detector_signals": 176,
+  "alerts": 143,
+  "corroborated_alerts": 11,
   "alerts_by_severity": {
-    "medium": 93,
-    "high": 69,
-    "critical": 21
+    "medium": 121,
+    "high": 14,
+    "critical": 8
   },
   "alerts_by_detector": {
-    "isolation_forest": 69,
-    "statistical_process_control": 61,
+    "isolation_forest": 65,
+    "statistical_process_control": 58,
     "rule": 53
   }
 }
