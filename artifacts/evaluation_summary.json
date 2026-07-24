@@ -1,0 +1,64 @@
+{
+  "injections": 4,
+  "fully_detected": 4,
+  "control_recall": 1.0,
+  "outcomes": [
+    {
+      "injection": "missing_amount",
+      "row_ids": [
+        2
+      ],
+      "expected_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "observed_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "detected": true
+    },
+    {
+      "injection": "broken_reconciliation",
+      "row_ids": [
+        21
+      ],
+      "expected_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "injection": "negative_component",
+      "row_ids": [
+        23
+      ],
+      "expected_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "injection": "duplicate_grain",
+      "row_ids": [
+        26,
+        3420
+      ],
+      "expected_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "observed_codes": [
+        "DUPLICATE_GRAIN",
+        "NEGATIVE_AMOUNT"
+      ],
+      "detected": true
+    }
+  ],
+  "method_note": "Controlled fault injection evaluates known structural and financial failure modes; it does not estimate production false-positive rates."
+}

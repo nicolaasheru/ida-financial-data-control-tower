@@ -1,0 +1,35 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+RAW_DIR = ROOT / "data" / "raw"
+PROCESSED_DIR = ROOT / "data" / "processed"
+ARTIFACT_DIR = ROOT / "artifacts"
+
+DATASET_ID = "DS01557"
+RESOURCE_ID = "RS00964"
+API_URL = "https://datacatalogapi.worldbank.org/dexapps/fone/api/apiservice"
+
+RAW_FILE = RAW_DIR / "ida_commitments_disbursements.json"
+CLEAN_FILE = PROCESSED_DIR / "ida_commitments_disbursements.csv"
+FEATURE_FILE = PROCESSED_DIR / "ida_model_features.csv"
+ALERT_FILE = ARTIFACT_DIR / "alerts.csv"
+RUN_SUMMARY_FILE = ARTIFACT_DIR / "run_summary.json"
+
+AMOUNT_COLUMNS = [
+    "development_policy",
+    "investment_lending",
+    "others",
+    "program_for_results",
+    "total",
+]
+COMPONENT_COLUMNS = AMOUNT_COLUMNS[:-1]
+REQUIRED_COLUMNS = [
+    "category",
+    "country",
+    "organization",
+    "region",
+    "time_period",
+    *AMOUNT_COLUMNS,
+]
+VALID_CATEGORIES = {"Commitments", "Gross Disbursements"}
+GRAIN_COLUMNS = ["organization", "country", "category", "time_period"]
