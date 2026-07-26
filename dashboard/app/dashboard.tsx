@@ -279,7 +279,16 @@ export default function Dashboard() {
         <header className="topbar">
           <div>
             <p className="eyebrow">IDA financial operations</p>
-            <h1>{panel === "alerts" ? "Control overview" : "Model & data quality"}</h1>
+            <h1>
+              {panel === "alerts"
+                ? "Financial integrity, at development scale."
+                : "Transparent controls. Accountable models."}
+            </h1>
+            <p className="mission-line">
+              {panel === "alerts"
+                ? "Monitor commitments and disbursements before unusual records reach downstream reporting."
+                : "Evaluate how data, rules, statistics, and machine learning work together to protect report quality."}
+            </p>
           </div>
           <div className="run-status">
             <i />

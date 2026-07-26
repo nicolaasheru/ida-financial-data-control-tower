@@ -343,21 +343,54 @@ nav button b {
   margin: 0;
   padding: 0 22px 24px;
   background:
-    linear-gradient(to bottom, var(--navy) 0 225px, #f5f4f1 225px 100%);
+    radial-gradient(circle at 84% 2%, #1b6b7b66 0, transparent 19%),
+    radial-gradient(circle at 72% 6%, #4db9b02b 0, transparent 13%),
+    linear-gradient(to bottom, #0a1b2d 0 258px, #f5f4f1 258px 100%);
 }
 
+.workspace::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 258px;
+  background:
+    linear-gradient(90deg, #09182af5 0%, #09182adb 38%, #09182a73 72%, #09182a3d 100%),
+    linear-gradient(0deg, #09182ad6 0%, transparent 45%),
+    url("/ida-global-atmosphere.png") right center / cover no-repeat;
+  opacity: .78;
+  pointer-events: none;
+}
+
+.workspace > * { position: relative; z-index: 1; }
+
 .topbar {
-  height: 88px;
+  position: relative;
+  height: 121px;
   color: white;
 }
+
+.topbar::after {
+  display: none;
+}
+
+.topbar > * { position: relative; z-index: 1; }
 
 .topbar .eyebrow { color: #728198; }
 .topbar h1 {
   color: #f6f8fb;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 24px;
-  font-weight: 650;
-  letter-spacing: -.035em;
+  max-width: 660px;
+  font-size: 29px;
+  font-weight: 570;
+  letter-spacing: -.045em;
+}
+
+.mission-line {
+  max-width: 660px;
+  margin: 7px 0 0;
+  color: #8fa4b5;
+  font-size: 9px;
+  line-height: 1.5;
 }
 
 .run-status {
@@ -372,7 +405,7 @@ nav button b {
   z-index: 1;
   grid-template-columns: 1.04fr 1fr .9fr 1.15fr;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .metric {
