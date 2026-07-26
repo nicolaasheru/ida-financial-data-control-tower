@@ -4,6 +4,7 @@ import pandas as pd
 
 from src.features import engineer_features
 from src.pipeline import build_analyst_queue
+from src.review import merge_review_state
 from src.validate import validate_and_clean
 
 
@@ -143,6 +144,45 @@ class FinancialControlTests(unittest.TestCase):
         )
         queue = build_analyst_queue(signal)
         self.assertEqual(queue.iloc[0]["severity"], "medium")
+
+    def test_review_fields_exist_in_analyst_queue(self):
+        signal = pd.DataFrame(
+            [
+                {
+                    "row_id": 1,
+                    "severity": "medium",
+                    "reason_code": "A",
+                    "detector": "rule",
+                    "anomaly_score": None,
+                    "materiality_percentile": 0.5,
+                }
+            ]
+        )
+        queue = build_analyst_queue(signal)
+        for column in [
+            "review_status",
+            "review_outcome",
+            "review_confidence",
+            "evidence_url",
+        ]:
+            self.assertIn(column, queue.columns)
+
+    def test_empty_review_store_preserves_queue(self):
+        signal = pd.DataFrame(
+            [
+                {
+                    "row_id": 1,
+                    "severity": "medium",
+                    "reason_code": "A",
+                    "detector": "rule",
+                    "anomaly_score": None,
+                    "materiality_percentile": 0.5,
+                }
+            ]
+        )
+        queue = build_analyst_queue(signal)
+        merged = merge_review_state(queue)
+        self.assertEqual(merged.iloc[0]["review_status"], "pending")
 
 
 if __name__ == "__main__":

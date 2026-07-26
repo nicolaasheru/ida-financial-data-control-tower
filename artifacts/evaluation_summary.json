@@ -1,7 +1,12 @@
 {
-  "injections": 4,
-  "fully_detected": 4,
+  "injections": 5,
+  "fully_detected": 5,
   "control_recall": 1.0,
+  "recall_by_layer": {
+    "structural_or_financial_rule": 1.0,
+    "statistical": 1.0,
+    "machine_learning": 1.0
+  },
   "outcomes": [
     {
       "injection": "missing_amount",
@@ -58,7 +63,22 @@
         "NEGATIVE_AMOUNT"
       ],
       "detected": true
+    },
+    {
+      "injection": "reconciled_historical_spike",
+      "row_ids": [
+        2280
+      ],
+      "expected_codes": [
+        "YEAR_OVER_YEAR_SHIFT",
+        "MULTIVARIATE_ANOMALY"
+      ],
+      "observed_codes": [
+        "MULTIVARIATE_ANOMALY",
+        "YEAR_OVER_YEAR_SHIFT"
+      ],
+      "detected": true
     }
   ],
-  "method_note": "Controlled fault injection evaluates known structural and financial failure modes; it does not estimate production false-positive rates."
+  "method_note": "Controlled fault injection evaluates selected structural, financial, statistical, and ML-prioritization behaviors. It does not estimate production accuracy or false-positive rates."
 }

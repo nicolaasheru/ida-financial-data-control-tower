@@ -17,6 +17,7 @@ from .config import (
 from .detect import detect_isolation_forest, detect_statistical
 from .features import engineer_features
 from .ingest import load_raw
+from .review import merge_review_state
 from .validate import validate_and_clean
 
 
@@ -145,6 +146,8 @@ def build_analyst_queue(signals: pd.DataFrame) -> pd.DataFrame:
                 "reviewer": "",
                 "review_notes": "",
                 "reviewed_at": "",
+                "review_confidence": "",
+                "evidence_url": "",
             }
         )
         records.append(record)
@@ -176,6 +179,7 @@ def run(refresh: bool = False) -> dict:
     signals = pd.concat(frames, ignore_index=True, sort=False) if frames else pd.DataFrame()
     signals = _add_context(signals, features)
     alerts = build_analyst_queue(signals)
+    alerts = merge_review_state(alerts)
 
     validation.clean.to_csv(CLEAN_FILE, index=False)
     features.to_csv(FEATURE_FILE, index=False)
@@ -192,6 +196,16 @@ def run(refresh: bool = False) -> dict:
         "alerts": int(len(alerts)),
         "corroborated_alerts": (
             int(alerts["corroborated"].sum()) if not alerts.empty else 0
+        ),
+        "reviewed_alerts": (
+            int(alerts["review_outcome"].fillna("").astype(str).str.strip().ne("").sum())
+            if not alerts.empty
+            else 0
+        ),
+        "resolved_alerts": (
+            int(alerts["review_status"].fillna("").eq("resolved").sum())
+            if not alerts.empty
+            else 0
         ),
         "alerts_by_severity": (
             alerts["severity"].value_counts().to_dict() if not alerts.empty else {}

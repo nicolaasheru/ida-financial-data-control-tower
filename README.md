@@ -15,7 +15,7 @@ financial records before they propagate into downstream reporting?
 - Dataset: IDA Commitments and Disbursements — Country / Economy Summary
 - WBG Finances dataset ID: `DS01557`
 - Resource ID: `RS00964`
-- Coverage: FY2014 onward, quarterly
+- Coverage: FY2014 onward, with annual history and recent quarterly observations
 - Unit: USD millions
 - License: CC BY 4.0
 
@@ -59,6 +59,8 @@ Key outputs:
 - `artifacts/alert_signals.csv`: one row per detector signal.
 - `artifacts/alerts.csv`: consolidated analyst queue, one row per source record.
 - `artifacts/manual_review_sample.csv`: a stratified review sample.
+- `artifacts/reviews.csv`: durable review decisions preserved across pipeline runs.
+- `artifacts/review_summary.json`: review coverage and caveated rate estimates.
 - `artifacts/run_summary.json`: run-level volumes and severity distribution.
 
 Create the manual-review sample with:
@@ -67,14 +69,28 @@ Create the manual-review sample with:
 python -m src.review
 ```
 
-After entering review outcomes in the CSV, summarize false-positive behavior:
+After entering review outcomes in the sample, persist them and summarize review
+behavior:
 
 ```bash
-python -m src.review --summarize
+python -m src.review --sync-sample --summarize
 ```
 
 ## Current validation
 
-The controlled fault-injection harness tests known structural failures. The
-manual-review workflow estimates false-positive behavior on untouched alerts.
-No accuracy or precision claim is made before a reviewer labels that sample.
+The controlled fault-injection harness tests five scenarios: missing amount,
+broken reconciliation, negative component, duplicate grain, and an internally
+reconciled historical spike. The spike must exercise both the statistical and ML
+layers. Detection of these selected injections does not imply 100% real-world
+accuracy.
+
+The manual-review workflow estimates false-positive behavior on untouched alerts.
+Rates remain suppressed until at least ten cases are resolved. The initial
+critical-alert review is AI-assisted and based on public evidence; it is not a
+substitute for validation by an IDA financial-data specialist.
+
+## Independent-project disclaimer
+
+This is an independent portfolio prototype using publicly available World Bank
+data. It is not an official World Bank Group system and does not use internal WBG
+infrastructure or non-public financial records.

@@ -4,7 +4,7 @@ import json
 
 import pandas as pd
 
-from .config import ARTIFACT_DIR
+from .config import ARTIFACT_DIR, COMPONENT_COLUMNS
 from .detect import detect_isolation_forest, detect_statistical
 from .features import engineer_features
 from .ingest import load_raw
@@ -70,6 +70,30 @@ def inject_controlled_anomalies(source: pd.DataFrame) -> tuple[pd.DataFrame, lis
             "expected_codes": ["DUPLICATE_GRAIN"],
         }
     )
+
+    # Inject a large but internally reconciled historical movement. This tests
+    # the statistical and ML detection layers without relying on a broken total.
+    spike_candidates = df.index[
+        df["organization"].eq("IDA")
+        & df["country"].eq("Afghanistan")
+        & df["category"].eq("Gross Disbursements")
+        & df["time_period"].eq("FY16")
+    ].tolist()
+    if len(spike_candidates) != 1:
+        raise RuntimeError("The controlled spike target is unavailable.")
+    spike_idx = spike_candidates[0]
+    for column in [*COMPONENT_COLUMNS, "total"]:
+        df.at[spike_idx, column] = float(df.at[spike_idx, column]) * 12.0
+    labels.append(
+        {
+            "injection": "reconciled_historical_spike",
+            "row_ids": [int(spike_idx)],
+            "expected_codes": [
+                "YEAR_OVER_YEAR_SHIFT",
+                "MULTIVARIATE_ANOMALY",
+            ],
+        }
+    )
     return df, labels
 
 
@@ -102,6 +126,22 @@ def evaluate() -> dict:
             }
         )
 
+    layer_by_code = {
+        "INVALID_AMOUNT": "structural_or_financial_rule",
+        "TOTAL_MISMATCH": "structural_or_financial_rule",
+        "NEGATIVE_AMOUNT": "structural_or_financial_rule",
+        "DUPLICATE_GRAIN": "structural_or_financial_rule",
+        "YEAR_OVER_YEAR_SHIFT": "statistical",
+        "MULTIVARIATE_ANOMALY": "machine_learning",
+    }
+    layer_outcomes = {}
+    for outcome in outcomes:
+        for code in outcome["expected_codes"]:
+            layer = layer_by_code[code]
+            layer_outcomes.setdefault(layer, []).append(
+                code in outcome["observed_codes"]
+            )
+
     summary = {
         "injections": len(outcomes),
         "fully_detected": sum(item["detected"] for item in outcomes),
@@ -110,10 +150,15 @@ def evaluate() -> dict:
             if outcomes
             else 0.0
         ),
+        "recall_by_layer": {
+            layer: sum(results) / len(results)
+            for layer, results in layer_outcomes.items()
+        },
         "outcomes": outcomes,
         "method_note": (
-            "Controlled fault injection evaluates known structural and financial "
-            "failure modes; it does not estimate production false-positive rates."
+            "Controlled fault injection evaluates selected structural, financial, "
+            "statistical, and ML-prioritization behaviors. It does not estimate "
+            "production accuracy or false-positive rates."
         ),
     }
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)

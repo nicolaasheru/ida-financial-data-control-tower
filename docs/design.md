@@ -4,7 +4,7 @@
 
 One row per:
 
-`organization × country × category × fiscal quarter`
+`organization × country × category × time period`
 
 where category is either `Commitments` or `Gross Disbursements`.
 
@@ -57,6 +57,11 @@ Materiality percentiles compare a record only with peers in the same period type
 category, and entity type. Dollar bands are prioritization aids and are not WBG
 policy thresholds.
 
+Materiality band and materiality percentile answer different questions. The band
+is an absolute USD reference. The percentile expresses relative size within the
+record's annual/quarterly, commitment/disbursement, and entity-type segment.
+Severity escalation uses the segmented percentile, not the absolute band.
+
 The ML evidence lists the largest normalized feature deviations. These values help
 an analyst orient the review, but they are not causal feature contributions.
 
@@ -82,6 +87,30 @@ Because the public source has no anomaly labels, evaluation will use:
 3. alert volume and false-positive review on untouched records;
 4. stability across time-based train/test windows;
 5. analyst-oriented explanations and reason codes.
+
+The current harness includes one internally reconciled spike specifically to
+exercise the statistical and ML layers. Recall is reported by detector layer so
+rule validation is not presented as general anomaly-model accuracy.
+
+## Source-discovery decision
+
+Dataset `DS01556` was initially investigated because its metadata referenced IBRD
+and IDA. The extracted API records were labelled IBRD only, so they were not
+relabelled or used in this IDA pipeline. Dataset `DS01557` is the active source.
+The unused DS01556 snapshot was removed from the active raw-data directory to
+avoid implying that IBRD records enter the IDA analysis.
+
+## Critical-alert interpretation
+
+Public evidence confirms that several critical alerts correspond to legitimate,
+exceptional financing activity. The World Bank FY2020 annual report independently
+reports the same commitment totals for Nigeria, Tanzania, and approximately
+Somalia. Public reporting also documents extraordinary Ukraine emergency
+financing during FY23. Other critical records remain unresolved where reviewed
+sources do not reconstruct the complete annual value.
+
+FY20 is part of IDA18. IDA19 began July 1, 2020 and covered FY21–FY23; FY20 alerts
+must not be attributed to IDA19. See `docs/critical_alert_review.md`.
 
 ## Production-oriented handoff
 

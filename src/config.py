@@ -16,6 +16,8 @@ ALERT_FILE = ARTIFACT_DIR / "alerts.csv"
 RUN_SUMMARY_FILE = ARTIFACT_DIR / "run_summary.json"
 SIGNAL_FILE = ARTIFACT_DIR / "alert_signals.csv"
 REVIEW_SAMPLE_FILE = ARTIFACT_DIR / "manual_review_sample.csv"
+REVIEW_FILE = ARTIFACT_DIR / "reviews.csv"
+REVIEW_SUMMARY_FILE = ARTIFACT_DIR / "review_summary.json"
 
 AMOUNT_COLUMNS = [
     "development_policy",
