@@ -694,6 +694,28 @@ export default function Dashboard() {
             </article>
           </section>
         )}
+        <footer className="creator-footer">
+          <div className="creator-signature">
+            <span className="creator-mark">N/D</span>
+            <div>
+              <strong>Designed & engineered by Nicolaas</strong>
+              <span>Independent financial data engineering prototype</span>
+            </div>
+          </div>
+          <div className="creator-links">
+            <a
+              href="https://linkedin.com/in/nicolaasheru"
+              target="_blank"
+              rel="noreferrer"
+            >
+              LinkedIn ↗
+            </a>
+            <a href="mailto:nicolaasherud@gmail.com">
+              nicolaasherud@gmail.com
+            </a>
+          </div>
+          <span className="creator-watermark" aria-hidden="true">NICOLAAS</span>
+        </footer>
       </section>
     </main>
   );
