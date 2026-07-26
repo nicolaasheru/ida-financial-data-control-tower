@@ -58,6 +58,31 @@ type ReviewSummary = {
   minimum_resolved_for_rate: number;
 };
 
+type ReviewRecord = {
+  row_id: number;
+  review_status: "pending" | "in_review" | "resolved";
+  review_outcome: string;
+  reviewer: string;
+  review_notes: string;
+  reviewed_at: string;
+  review_confidence: string;
+  evidence_url: string;
+  version: number;
+};
+
+type ReviewEvent = {
+  event_id: number;
+  previous_status: string;
+  new_status: string;
+  previous_outcome: string;
+  new_outcome: string;
+  actor: string;
+  event_note: string;
+  created_at: string;
+  resulting_version: number;
+};
+
+const REVIEW_API_URL = "http://localhost:8000";
 const number = new Intl.NumberFormat("en-US");
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -135,6 +160,18 @@ export default function Dashboard() {
   const [selectedId, setSelectedId] = useState("");
   const [sort, setSort] = useState<"priority" | "materiality" | "amount">("priority");
   const [panel, setPanel] = useState<"alerts" | "quality">("alerts");
+  const [liveReview, setLiveReview] = useState<ReviewRecord | null>(null);
+  const [reviewHistory, setReviewHistory] = useState<ReviewEvent[]>([]);
+  const [reviewApiStatus, setReviewApiStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewForm, setReviewForm] = useState({
+    review_outcome: "",
+    reviewer: "",
+    review_notes: "",
+    review_confidence: "",
+    evidence_url: "",
+  });
 
   useEffect(() => {
     Promise.all([
@@ -142,9 +179,33 @@ export default function Dashboard() {
       fetch("/data/run_summary.json").then((response) => response.json()),
       fetch("/data/evaluation_summary.json").then((response) => response.json()),
       fetch("/data/review_summary.json").then((response) => response.json()),
-    ]).then(([csv, runData, evaluationData, reviewData]) => {
+      fetch(`${REVIEW_API_URL}/api/reviews`)
+        .then((response) => {
+          if (!response.ok) throw new Error("Review API unavailable");
+          return response.json() as Promise<ReviewRecord[]>;
+        })
+        .catch(() => [] as ReviewRecord[]),
+    ]).then(([csv, runData, evaluationData, reviewData, persistedReviews]) => {
       const parsed = parseCsv(csv);
-      setAlerts(parsed);
+      const reviewsById = new Map(
+        persistedReviews.map((record) => [String(record.row_id), record]),
+      );
+      const hydrated = parsed.map((alert) => {
+        const persisted = reviewsById.get(alert.row_id);
+        return persisted
+          ? {
+              ...alert,
+              review_status: persisted.review_status,
+              review_outcome: persisted.review_outcome,
+              reviewer: persisted.reviewer,
+              review_notes: persisted.review_notes,
+              reviewed_at: persisted.reviewed_at,
+              review_confidence: persisted.review_confidence,
+              evidence_url: persisted.evidence_url,
+            }
+          : alert;
+      });
+      setAlerts(hydrated);
       setSelectedId(parsed[0]?.row_id ?? "");
       setRun(runData);
       setEvaluation(evaluationData);
@@ -178,7 +239,147 @@ export default function Dashboard() {
   }, [alerts, severity, period, reviewStatus, query, sort]);
 
   const selected = alerts.find((alert) => alert.row_id === selectedId) ?? filtered[0];
-  const resolvedRate = review ? Math.round((review.resolved / review.sample_size) * 100) : 0;
+
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    Promise.all([
+      fetch(`${REVIEW_API_URL}/api/reviews/${selected.row_id}`).then((response) => {
+        if (!response.ok) throw new Error("Review API unavailable");
+        return response.json();
+      }),
+      fetch(`${REVIEW_API_URL}/api/reviews/${selected.row_id}/history`).then((response) => {
+        if (!response.ok) throw new Error("Review history unavailable");
+        return response.json();
+      }),
+    ])
+      .then(([record, history]: [ReviewRecord, ReviewEvent[]]) => {
+        if (!active) return;
+        setLiveReview(record);
+        setReviewHistory(history);
+        setReviewForm({
+          review_outcome: record.review_outcome,
+          reviewer: record.reviewer,
+          review_notes: record.review_notes,
+          review_confidence: record.review_confidence,
+          evidence_url: record.evidence_url,
+        });
+        setReviewError("");
+        setReviewApiStatus("online");
+      })
+      .catch(() => {
+        if (!active) return;
+        setLiveReview(null);
+        setReviewHistory([]);
+        setReviewForm({
+          review_outcome: selected.review_outcome || "",
+          reviewer: selected.reviewer || "",
+          review_notes: selected.review_notes || "",
+          review_confidence: selected.review_confidence || "",
+          evidence_url: selected.evidence_url || "",
+        });
+        setReviewError("");
+        setReviewApiStatus("offline");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected]);
+
+  async function saveReview(targetStatus: "in_review" | "resolved") {
+    if (!selected || !liveReview) return;
+    setReviewSaving(true);
+    setReviewError("");
+    const isFinalOutcome = [
+      "confirmed_data_issue",
+      "legitimate_exception",
+      "false_positive",
+    ].includes(reviewForm.review_outcome);
+    const payload = {
+      ...reviewForm,
+      review_status: targetStatus,
+      review_outcome:
+        targetStatus === "in_review" && isFinalOutcome
+          ? ""
+          : reviewForm.review_outcome,
+      expected_version: liveReview.version,
+    };
+    try {
+      const response = await fetch(`${REVIEW_API_URL}/api/reviews/${selected.row_id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ detail: "Unable to save review" }));
+        throw new Error(body.detail ?? "Unable to save review");
+      }
+      const updated: ReviewRecord = await response.json();
+      setLiveReview(updated);
+      setReviewForm({
+        review_outcome: updated.review_outcome,
+        reviewer: updated.reviewer,
+        review_notes: updated.review_notes,
+        review_confidence: updated.review_confidence,
+        evidence_url: updated.evidence_url,
+      });
+      setAlerts((current) =>
+        current.map((alert) =>
+          alert.row_id === selected.row_id
+            ? {
+                ...alert,
+                review_status: updated.review_status,
+                review_outcome: updated.review_outcome,
+                reviewer: updated.reviewer,
+                review_notes: updated.review_notes,
+                reviewed_at: updated.reviewed_at,
+                review_confidence: updated.review_confidence,
+                evidence_url: updated.evidence_url,
+              }
+            : alert,
+        ),
+      );
+      const historyResponse = await fetch(
+        `${REVIEW_API_URL}/api/reviews/${selected.row_id}/history`,
+      );
+      if (historyResponse.ok) setReviewHistory(await historyResponse.json());
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Unable to save review");
+    } finally {
+      setReviewSaving(false);
+    }
+  }
+  const liveReviewSummary = useMemo(() => {
+    const resolved = alerts.filter((alert) => alert.review_status === "resolved").length;
+    const reviewed = alerts.filter((alert) => alert.review_status !== "pending").length;
+    const open = alerts.length - resolved;
+    const sampleSize = Math.max(review?.sample_size ?? 0, reviewed);
+    const openBySeverity = alerts
+      .filter((alert) => alert.review_status !== "resolved")
+      .reduce(
+        (counts, alert) => {
+          counts[alert.severity] += 1;
+          return counts;
+        },
+        { critical: 0, high: 0, medium: 0 },
+      );
+    return {
+      open,
+      resolved,
+      reviewed,
+      sampleSize,
+      openBySeverity,
+      legitimateExceptions: alerts.filter(
+        (alert) => alert.review_outcome === "legitimate_exception",
+      ).length,
+      needsMoreInformation: alerts.filter(
+        (alert) => alert.review_outcome === "needs_more_information",
+      ).length,
+    };
+  }, [alerts, review]);
+  const resolvedRate = liveReviewSummary.sampleSize
+    ? Math.round((liveReviewSummary.resolved / liveReviewSummary.sampleSize) * 100)
+    : 0;
   const totalSignals = run
     ? Object.values(run.alerts_by_detector).reduce((sum, current) => sum + current, 0)
     : 0;
@@ -253,7 +454,7 @@ export default function Dashboard() {
         <nav>
           <button className={panel === "alerts" ? "active" : ""} onClick={() => setPanel("alerts")}>
             <span>⌁</span> Alert operations
-            <b>{run?.alerts ?? "—"}</b>
+            <b>{alerts.length ? liveReviewSummary.open : "—"}</b>
           </button>
           <button className={panel === "quality" ? "active" : ""} onClick={() => setPanel("quality")}>
             <span>◫</span> Model & data quality
@@ -313,15 +514,15 @@ export default function Dashboard() {
               </article>
               <article className="metric">
                 <span>Open alerts</span>
-                <strong>{run?.alerts ?? "—"}</strong>
+                <strong>{alerts.length ? liveReviewSummary.open : "—"}</strong>
                 <div className="severity-strip">
-                  <i className="critical" style={{ flex: run?.alerts_by_severity.critical ?? 0 }} />
-                  <i className="high" style={{ flex: run?.alerts_by_severity.high ?? 0 }} />
-                  <i className="medium" style={{ flex: run?.alerts_by_severity.medium ?? 0 }} />
+                  <i className="critical" style={{ flex: liveReviewSummary.openBySeverity.critical }} />
+                  <i className="high" style={{ flex: liveReviewSummary.openBySeverity.high }} />
+                  <i className="medium" style={{ flex: liveReviewSummary.openBySeverity.medium }} />
                 </div>
                 <small>
-                  <b className="critical-text">{run?.alerts_by_severity.critical ?? "—"} critical</b>
-                  {" · "}{run?.alerts_by_severity.high ?? "—"} high
+                  <b className="critical-text">{alerts.length ? liveReviewSummary.openBySeverity.critical : "—"} critical</b>
+                  {" · "}{alerts.length ? liveReviewSummary.openBySeverity.high : "—"} high
                 </small>
               </article>
               <article className="metric">
@@ -332,11 +533,11 @@ export default function Dashboard() {
               <article className="metric">
                 <span>Review progress</span>
                 <div className="progress-value">
-                  <strong>{review?.resolved ?? "—"}</strong>
-                  <em>of {review?.sample_size ?? "—"} resolved</em>
+                  <strong>{alerts.length ? liveReviewSummary.resolved : "—"}</strong>
+                  <em>of {alerts.length ? liveReviewSummary.sampleSize : "—"} reviewed sample</em>
                 </div>
                 <div className="progress"><i style={{ width: `${resolvedRate}%` }} /></div>
-                <small>{review?.needs_more_information ?? "—"} need more information</small>
+                <small>{alerts.length ? liveReviewSummary.needsMoreInformation : "—"} need more information</small>
               </article>
             </section>
 
@@ -444,7 +645,7 @@ export default function Dashboard() {
                   </div>
                   <b>→</b>
                   <div className="funnel-step resolved">
-                    <strong>{review?.resolved ?? "—"}</strong>
+                    <strong>{alerts.length ? liveReviewSummary.resolved : "—"}</strong>
                     <span>Cases resolved</span>
                   </div>
                 </div>
@@ -452,12 +653,12 @@ export default function Dashboard() {
                   <div>
                     <i className="legitimate-outcome" />
                     <span>Legitimate exceptions</span>
-                    <strong>{review?.legitimate_exceptions ?? "—"}</strong>
+                    <strong>{alerts.length ? liveReviewSummary.legitimateExceptions : "—"}</strong>
                   </div>
                   <div>
                     <i className="unresolved-outcome" />
                     <span>Need more information</span>
-                    <strong>{review?.needs_more_information ?? "—"}</strong>
+                    <strong>{alerts.length ? liveReviewSummary.needsMoreInformation : "—"}</strong>
                   </div>
                 </div>
                 <p className="chart-note">Precision rates remain suppressed until 10 cases are resolved.</p>
@@ -620,9 +821,17 @@ export default function Dashboard() {
                   <section className="review-card">
                     <div className="section-title">
                       <h3>Analyst review</h3>
-                      <span className={`review-state ${selected.review_status}`}>{label(selected.review_status)}</span>
+                      <div className="review-card-status">
+                        <span className={`api-state ${reviewApiStatus}`}>
+                          {reviewApiStatus === "online" ? "Live" : reviewApiStatus === "offline" ? "Read only" : "Connecting"}
+                        </span>
+                        <span className={`review-state ${liveReview?.review_status ?? selected.review_status}`}>
+                          {label(liveReview?.review_status ?? selected.review_status)}
+                        </span>
+                      </div>
                     </div>
-                    {selected.review_notes ? (
+                    {reviewApiStatus === "offline" ? (
+                      selected.review_notes ? (
                       <>
                         <p>{selected.review_notes}</p>
                         <div className="review-meta">
@@ -633,8 +842,122 @@ export default function Dashboard() {
                           <a href={selected.evidence_url} target="_blank" rel="noreferrer">Open supporting evidence ↗</a>
                         )}
                       </>
+                      ) : (
+                        <p>No review has been recorded. Start the review API to enable analyst updates.</p>
+                      )
+                    ) : liveReview ? (
+                      <div className="review-editor">
+                        <label>
+                          Reviewer
+                          <input
+                            value={reviewForm.reviewer}
+                            onChange={(event) => setReviewForm({ ...reviewForm, reviewer: event.target.value })}
+                            placeholder="Analyst name"
+                          />
+                        </label>
+                        {liveReview.review_status !== "pending" && (
+                          <>
+                            <div className="review-editor-grid">
+                              <label>
+                                Outcome
+                                <select
+                                  value={reviewForm.review_outcome}
+                                  onChange={(event) => setReviewForm({ ...reviewForm, review_outcome: event.target.value })}
+                                >
+                                  <option value="">No outcome selected</option>
+                                  <option value="needs_more_information">Needs more information</option>
+                                  <option value="confirmed_data_issue">Confirmed data issue</option>
+                                  <option value="legitimate_exception">Legitimate exception</option>
+                                  <option value="false_positive">False positive</option>
+                                </select>
+                              </label>
+                              <label>
+                                Confidence
+                                <select
+                                  value={reviewForm.review_confidence}
+                                  onChange={(event) => setReviewForm({ ...reviewForm, review_confidence: event.target.value })}
+                                >
+                                  <option value="">Not selected</option>
+                                  <option value="high">High</option>
+                                  <option value="medium">Medium</option>
+                                  <option value="low">Low</option>
+                                </select>
+                              </label>
+                            </div>
+                            <label>
+                              Review notes
+                              <textarea
+                                value={reviewForm.review_notes}
+                                onChange={(event) => setReviewForm({ ...reviewForm, review_notes: event.target.value })}
+                                placeholder="Document the evidence and analytical judgment."
+                              />
+                            </label>
+                            <label>
+                              Evidence URL
+                              <input
+                                type="url"
+                                value={reviewForm.evidence_url}
+                                onChange={(event) => setReviewForm({ ...reviewForm, evidence_url: event.target.value })}
+                                placeholder="https://"
+                              />
+                            </label>
+                          </>
+                        )}
+                        {reviewError && <p className="review-error">{reviewError}</p>}
+                        <div className="review-actions">
+                          {liveReview.review_status === "pending" ? (
+                            <button
+                              disabled={reviewSaving || !reviewForm.reviewer.trim()}
+                              onClick={() => saveReview("in_review")}
+                            >
+                              Begin review
+                            </button>
+                          ) : liveReview.review_status === "resolved" ? (
+                            <button
+                              disabled={reviewSaving || !reviewForm.reviewer.trim()}
+                              onClick={() => saveReview("in_review")}
+                            >
+                              Reopen review
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                className="secondary"
+                                disabled={reviewSaving || !reviewForm.reviewer.trim()}
+                                onClick={() => saveReview("in_review")}
+                              >
+                                Save progress
+                              </button>
+                              <button
+                                disabled={
+                                  reviewSaving ||
+                                  !reviewForm.reviewer.trim() ||
+                                  !reviewForm.review_notes.trim() ||
+                                  !reviewForm.review_confidence ||
+                                  !["confirmed_data_issue", "legitimate_exception", "false_positive"].includes(reviewForm.review_outcome)
+                                }
+                                onClick={() => saveReview("resolved")}
+                              >
+                                Resolve alert
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        {reviewHistory.length > 0 && (
+                          <div className="audit-history">
+                            <strong>Audit history</strong>
+                            {reviewHistory.slice(0, 4).map((event) => (
+                              <div key={event.event_id}>
+                                <span>{event.actor}</span>
+                                <p>{label(event.previous_status)} → {label(event.new_status)}</p>
+                                <time>{new Date(event.created_at).toLocaleString()}</time>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ) : (
-                      <p>No review has been recorded for this alert.</p>
+                      <p>Connecting to the review service…</p>
                     )}
                   </section>
                 </aside>
@@ -672,14 +995,14 @@ export default function Dashboard() {
             </article>
             <article className="quality-card">
               <p className="eyebrow">Review evidence</p>
-              <h2>{review?.resolved ?? "—"} cases resolved</h2>
+              <h2>{alerts.length ? liveReviewSummary.resolved : "—"} cases resolved</h2>
               <p>
                 Precision and false-positive rates remain suppressed until at least{" "}
                 {review?.minimum_resolved_for_rate ?? "—"} cases are resolved.
               </p>
               <div className="review-breakdown">
-                <span><i className="legitimate" /> {review?.legitimate_exceptions ?? "—"} legitimate exceptions</span>
-                <span><i className="unresolved" /> {review?.needs_more_information ?? "—"} need more information</span>
+                <span><i className="legitimate" /> {alerts.length ? liveReviewSummary.legitimateExceptions : "—"} legitimate exceptions</span>
+                <span><i className="unresolved" /> {alerts.length ? liveReviewSummary.needsMoreInformation : "—"} need more information</span>
               </div>
             </article>
             <article className="quality-card">

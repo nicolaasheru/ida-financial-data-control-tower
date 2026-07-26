@@ -92,6 +92,26 @@ npm run dev
 The dashboard is an investigation interface. It does not autonomously classify
 alerts as errors or replace review by an IDA financial-data specialist.
 
+## Persistent analyst review
+
+Phase 3 adds a FastAPI review service backed by SQLite for local development.
+It enforces review-state transitions, records append-only audit events, and uses
+optimistic version checks to prevent silent overwrites.
+
+Run the full local workflow:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cd dashboard && npm install && cd ..
+bash scripts/run-full-stack.sh
+```
+
+When the API is available, the investigation panel supports beginning, saving,
+resolving, and reopening reviews. When it is unavailable, the dashboard remains
+usable in read-only snapshot mode. See `docs/backend_review_workflow.md`.
+
 Create the manual-review sample with:
 
 ```bash

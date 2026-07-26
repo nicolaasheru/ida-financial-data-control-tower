@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -10,6 +11,7 @@ from .config import (
     ALERT_FILE,
     ARTIFACT_DIR,
     REVIEW_FILE,
+    REVIEW_DATABASE_FILE,
     REVIEW_SAMPLE_FILE,
     REVIEW_SUMMARY_FILE,
 )
@@ -35,6 +37,28 @@ REVIEW_COLUMNS = [
 
 
 def load_review_store() -> pd.DataFrame:
+    if REVIEW_DATABASE_FILE.exists():
+        with sqlite3.connect(REVIEW_DATABASE_FILE) as connection:
+            reviews = pd.read_sql_query(
+                """
+                SELECT
+                    row_id,
+                    review_status,
+                    review_outcome,
+                    reviewer,
+                    review_notes,
+                    reviewed_at,
+                    review_confidence,
+                    evidence_url
+                FROM reviews
+                """,
+                connection,
+                dtype={"row_id": "Int64"},
+            )
+        for column in REVIEW_COLUMNS:
+            if column not in reviews:
+                reviews[column] = ""
+        return reviews[REVIEW_COLUMNS].drop_duplicates("row_id", keep="last")
     if not REVIEW_FILE.exists():
         return pd.DataFrame(columns=REVIEW_COLUMNS)
     reviews = pd.read_csv(REVIEW_FILE, dtype={"row_id": "Int64"})

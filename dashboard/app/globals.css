@@ -1284,3 +1284,163 @@ td {
 .amount-comparison .change-arrow::after {
   display: none;
 }
+
+/* Phase 3 analyst review workflow */
+.review-card-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.api-state {
+  padding-right: 9px;
+  border-right: 1px solid #c7d6d8;
+  color: #75868f;
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: .065em;
+  text-transform: uppercase;
+}
+
+.api-state.online { color: #347f7a; }
+.api-state.offline { color: #9a6b32; }
+
+.review-editor {
+  display: grid;
+  gap: 11px;
+  margin-top: 12px;
+}
+
+.review-editor label {
+  display: grid;
+  gap: 5px;
+  color: #687983;
+  font-size: 8px;
+  font-weight: 560;
+  letter-spacing: .025em;
+}
+
+.review-editor input,
+.review-editor select,
+.review-editor textarea {
+  width: 100%;
+  border: 1px solid #ccd9dc;
+  border-radius: 2px;
+  outline: none;
+  background: #f8fafa;
+  color: #182b38;
+  font: inherit;
+  font-size: 9px;
+}
+
+.review-editor input,
+.review-editor select {
+  height: 32px;
+  padding: 0 9px;
+}
+
+.review-editor textarea {
+  min-height: 90px;
+  resize: vertical;
+  padding: 9px;
+  line-height: 1.5;
+}
+
+.review-editor input:focus,
+.review-editor select:focus,
+.review-editor textarea:focus {
+  border-color: #5e989e;
+  box-shadow: 0 0 0 2px #5e989e14;
+}
+
+.review-editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  padding-top: 2px;
+}
+
+.review-actions button {
+  min-height: 31px;
+  padding: 0 12px;
+  border: 1px solid #244d57;
+  border-radius: 2px;
+  background: #173b47;
+  color: #f2f7f7;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.review-actions button.secondary {
+  border-color: #b8c8cc;
+  background: transparent;
+  color: #395761;
+}
+
+.review-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
+.review-error {
+  margin: 0 !important;
+  padding: 7px 8px;
+  border-left: 2px solid #b94b52;
+  background: #f8ecec;
+  color: #9d3f45 !important;
+}
+
+.audit-history {
+  display: grid;
+  gap: 0;
+  margin-top: 4px;
+  padding-top: 11px;
+  border-top: 1px solid #d0dcde;
+}
+
+.audit-history > strong {
+  margin-bottom: 7px;
+  color: #5a6d77;
+  font-size: 8px;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.audit-history > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 7px 0;
+  border-top: 1px solid #dae3e5;
+}
+
+.audit-history span {
+  color: #203743;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.audit-history p {
+  grid-column: 1;
+  margin: 0;
+  color: #697b84;
+  font-size: 8px;
+}
+
+.audit-history time {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  color: #85939a;
+  font-size: 7px;
+}
+
+@media (max-width: 520px) {
+  .review-editor-grid { grid-template-columns: 1fr; }
+  .review-actions { align-items: stretch; flex-direction: column; }
+}
