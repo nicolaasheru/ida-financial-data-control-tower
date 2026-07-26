@@ -1,0 +1,84 @@
+{
+  "injections": 5,
+  "fully_detected": 5,
+  "control_recall": 1.0,
+  "recall_by_layer": {
+    "structural_or_financial_rule": 1.0,
+    "statistical": 1.0,
+    "machine_learning": 1.0
+  },
+  "outcomes": [
+    {
+      "injection": "missing_amount",
+      "row_ids": [
+        2
+      ],
+      "expected_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "observed_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "detected": true
+    },
+    {
+      "injection": "broken_reconciliation",
+      "row_ids": [
+        21
+      ],
+      "expected_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "injection": "negative_component",
+      "row_ids": [
+        23
+      ],
+      "expected_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "injection": "duplicate_grain",
+      "row_ids": [
+        26,
+        3420
+      ],
+      "expected_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "observed_codes": [
+        "DUPLICATE_GRAIN",
+        "NEGATIVE_AMOUNT"
+      ],
+      "detected": true
+    },
+    {
+      "injection": "reconciled_historical_spike",
+      "row_ids": [
+        2280
+      ],
+      "expected_codes": [
+        "YEAR_OVER_YEAR_SHIFT",
+        "MULTIVARIATE_ANOMALY"
+      ],
+      "observed_codes": [
+        "MULTIVARIATE_ANOMALY",
+        "YEAR_OVER_YEAR_SHIFT"
+      ],
+      "detected": true
+    }
+  ],
+  "method_note": "Controlled fault injection evaluates selected structural, financial, statistical, and ML-prioritization behaviors. It does not estimate production accuracy or false-positive rates."
+}

@@ -63,6 +63,35 @@ Key outputs:
 - `artifacts/review_summary.json`: review coverage and caveated rate estimates.
 - `artifacts/run_summary.json`: run-level volumes and severity distribution.
 
+## Analyst dashboard
+
+Phase 1 adds a functional dashboard in `dashboard/`. It reads the actual pipeline
+artifacts and supports:
+
+- portfolio-level monitoring and severity summaries;
+- a searchable, filterable, and sortable analyst alert queue;
+- current-versus-prior financial comparisons;
+- detector evidence, corroboration, and recommended actions;
+- public-evidence review context; and
+- model, evaluation, and review-quality monitoring.
+
+After running the Python pipeline, synchronize its latest outputs:
+
+```bash
+bash scripts/sync-dashboard-data.sh
+```
+
+Run the dashboard locally:
+
+```bash
+cd dashboard
+npm ci
+npm run dev
+```
+
+The dashboard is an investigation interface. It does not autonomously classify
+alerts as errors or replace review by an IDA financial-data specialist.
+
 Create the manual-review sample with:
 
 ```bash

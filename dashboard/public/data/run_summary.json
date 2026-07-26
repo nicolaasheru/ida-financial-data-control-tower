@@ -1,0 +1,22 @@
+{
+  "run_timestamp_utc": "2026-07-26T06:33:31.263331+00:00",
+  "source_records": 3420,
+  "ida_records": 3420,
+  "countries": 202,
+  "periods": 14,
+  "detector_signals": 176,
+  "alerts": 143,
+  "corroborated_alerts": 11,
+  "reviewed_alerts": 30,
+  "resolved_alerts": 4,
+  "alerts_by_severity": {
+    "medium": 121,
+    "high": 14,
+    "critical": 8
+  },
+  "alerts_by_detector": {
+    "isolation_forest": 65,
+    "statistical_process_control": 58,
+    "rule": 53
+  }
+}

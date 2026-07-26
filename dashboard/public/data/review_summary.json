@@ -1,0 +1,16 @@
+{
+  "sample_size": 30,
+  "reviewed": 30,
+  "resolved": 4,
+  "confirmed_data_issues": 0,
+  "legitimate_exceptions": 4,
+  "false_positives": 0,
+  "needs_more_information": 26,
+  "actionable_precision": null,
+  "false_positive_rate": null,
+  "minimum_resolved_for_rate": 10,
+  "high_confidence_reviews": 4,
+  "medium_confidence_reviews": 1,
+  "low_confidence_reviews": 25,
+  "method_note": "Rates remain null until at least 10 cases are resolved. A legitimate exception counts as actionable because surfacing unusual but valid activity can still justify analyst review. This portfolio review is not a substitute for validation by an IDA financial-data specialist."
+}
