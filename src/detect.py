@@ -18,6 +18,9 @@ MODEL_FEATURES = [
     "disbursement_commitment_ratio",
     "quarter",
 ]
+ISOLATION_FOREST_CONTAMINATION = 0.02
+ISOLATION_FOREST_ESTIMATORS = 300
+ISOLATION_FOREST_RANDOM_STATE = 42
 
 
 def _severity(score: float) -> str:
@@ -46,6 +49,7 @@ def detect_statistical(features: pd.DataFrame) -> pd.DataFrame:
         rows.append(
             {
                 "row_id": int(df.at[idx, "row_id"]),
+                "record_key": str(df.at[idx, "record_key"]),
                 "severity": "high" if score >= 0.75 else "medium",
                 "reason_code": "YEAR_OVER_YEAR_SHIFT",
                 "detector": "statistical_process_control",
@@ -70,8 +74,8 @@ def detect_statistical(features: pd.DataFrame) -> pd.DataFrame:
 
 def detect_isolation_forest(
     features: pd.DataFrame,
-    contamination: float = 0.02,
-    random_state: int = 42,
+    contamination: float = ISOLATION_FOREST_CONTAMINATION,
+    random_state: int = ISOLATION_FOREST_RANDOM_STATE,
 ) -> tuple[pd.DataFrame, dict[str, Pipeline]]:
     country_records = features.loc[features["entity_type"].eq("country")].copy()
     segment_columns = ["period_type", "category"]
@@ -94,7 +98,7 @@ def detect_isolation_forest(
                 (
                     "detector",
                     IsolationForest(
-                        n_estimators=300,
+                        n_estimators=ISOLATION_FOREST_ESTIMATORS,
                         contamination=contamination,
                         random_state=random_state,
                     ),
@@ -134,6 +138,7 @@ def detect_isolation_forest(
             rows.append(
                 {
                     "row_id": int(segment.at[idx, "row_id"]),
+                    "record_key": str(segment.at[idx, "record_key"]),
                     "severity": provisional_severity,
                     "reason_code": "MULTIVARIATE_ANOMALY",
                     "detector": "isolation_forest",

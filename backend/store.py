@@ -40,6 +40,8 @@ def utc_now() -> str:
 
 
 class ReviewStore:
+    """Transactional analyst-review store keyed by stable financial grain."""
+
     def __init__(
         self,
         database_path: Path,
@@ -50,7 +52,7 @@ class ReviewStore:
         self.alerts_path = Path(alerts_path)
         self.seed_reviews_path = Path(seed_reviews_path) if seed_reviews_path else None
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._alert_ids = self._load_alert_ids()
+        self._alerts = self._load_alerts()
         self.initialize()
 
     @contextmanager
@@ -63,20 +65,33 @@ class ReviewStore:
         finally:
             connection.close()
 
-    def _load_alert_ids(self) -> set[int]:
+    def _load_alerts(self) -> dict[str, int]:
         with self.alerts_path.open(newline="", encoding="utf-8") as handle:
-            return {
-                int(row["row_id"])
-                for row in csv.DictReader(handle)
-                if row.get("row_id")
-            }
+            rows = list(csv.DictReader(handle))
+        if rows and "record_key" not in rows[0]:
+            raise ReviewValidationError(
+                "alerts.csv does not contain stable record_key values; rerun the pipeline"
+            )
+        return {
+            str(row["record_key"]): int(row["row_id"])
+            for row in rows
+            if row.get("record_key") and row.get("row_id")
+        }
+
+    def _legacy_key_for_row_id(self, row_id: int | str) -> str | None:
+        target = int(row_id)
+        return next(
+            (key for key, current_row_id in self._alerts.items() if current_row_id == target),
+            None,
+        )
 
     def initialize(self) -> None:
         with self.connect() as connection:
             connection.executescript(
                 """
-                CREATE TABLE IF NOT EXISTS reviews (
-                    row_id INTEGER PRIMARY KEY,
+                CREATE TABLE IF NOT EXISTS review_records (
+                    record_key TEXT PRIMARY KEY,
+                    row_id INTEGER NOT NULL,
                     review_status TEXT NOT NULL,
                     review_outcome TEXT NOT NULL DEFAULT '',
                     reviewer TEXT NOT NULL DEFAULT '',
@@ -89,9 +104,9 @@ class ReviewStore:
                     updated_at TEXT NOT NULL
                 );
 
-                CREATE TABLE IF NOT EXISTS review_events (
+                CREATE TABLE IF NOT EXISTS review_events_v2 (
                     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    row_id INTEGER NOT NULL,
+                    record_key TEXT NOT NULL,
                     previous_status TEXT NOT NULL,
                     new_status TEXT NOT NULL,
                     previous_outcome TEXT NOT NULL DEFAULT '',
@@ -102,12 +117,85 @@ class ReviewStore:
                     resulting_version INTEGER NOT NULL
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_review_events_row
-                    ON review_events (row_id, event_id);
+                CREATE INDEX IF NOT EXISTS idx_review_events_record
+                    ON review_events_v2 (record_key, event_id);
                 """
             )
             connection.commit()
+        self._migrate_legacy_tables()
         self.seed_from_csv()
+
+    def _migrate_legacy_tables(self) -> None:
+        """Copy v1 integer-keyed local reviews into the stable-key schema once."""
+        with self.connect() as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            if "reviews" not in tables:
+                return
+            legacy_reviews = connection.execute("SELECT * FROM reviews").fetchall()
+            for row in legacy_reviews:
+                values = dict(row)
+                record_key = self._legacy_key_for_row_id(values["row_id"])
+                if not record_key:
+                    continue
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO review_records (
+                        record_key, row_id, review_status, review_outcome,
+                        reviewer, review_notes, reviewed_at, review_confidence,
+                        evidence_url, version, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record_key,
+                        self._alerts[record_key],
+                        values["review_status"],
+                        values["review_outcome"],
+                        values["reviewer"],
+                        values["review_notes"],
+                        values["reviewed_at"],
+                        values["review_confidence"],
+                        values["evidence_url"],
+                        values["version"],
+                        values["created_at"],
+                        values["updated_at"],
+                    ),
+                )
+            if "review_events" in tables:
+                legacy_events = connection.execute(
+                    "SELECT * FROM review_events ORDER BY event_id"
+                ).fetchall()
+                for row in legacy_events:
+                    values = dict(row)
+                    record_key = self._legacy_key_for_row_id(values["row_id"])
+                    if not record_key:
+                        continue
+                    connection.execute(
+                        """
+                        INSERT OR IGNORE INTO review_events_v2 (
+                            event_id, record_key, previous_status, new_status,
+                            previous_outcome, new_outcome, actor, event_note,
+                            created_at, resulting_version
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            values["event_id"],
+                            record_key,
+                            values["previous_status"],
+                            values["new_status"],
+                            values["previous_outcome"],
+                            values["new_outcome"],
+                            values["actor"],
+                            values["event_note"],
+                            values["created_at"],
+                            values["resulting_version"],
+                        ),
+                    )
+            connection.commit()
 
     def seed_from_csv(self) -> None:
         if not self.seed_reviews_path or not self.seed_reviews_path.exists():
@@ -117,19 +205,22 @@ class ReviewStore:
         now = utc_now()
         with self.connect() as connection:
             for row in rows:
-                row_id = int(row["row_id"])
-                if row_id not in self._alert_ids:
+                record_key = row.get("record_key") or self._legacy_key_for_row_id(
+                    row.get("row_id", "")
+                )
+                if not record_key or record_key not in self._alerts:
                     continue
                 connection.execute(
                     """
-                    INSERT OR IGNORE INTO reviews (
-                        row_id, review_status, review_outcome, reviewer,
-                        review_notes, reviewed_at, review_confidence,
+                    INSERT OR IGNORE INTO review_records (
+                        record_key, row_id, review_status, review_outcome,
+                        reviewer, review_notes, reviewed_at, review_confidence,
                         evidence_url, version, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                     """,
                     (
-                        row_id,
+                        record_key,
+                        self._alerts[record_key],
                         row.get("review_status") or "pending",
                         row.get("review_outcome") or "",
                         row.get("reviewer") or "",
@@ -143,11 +234,12 @@ class ReviewStore:
                 )
             connection.commit()
 
-    def _default_review(self, row_id: int) -> dict:
-        if row_id not in self._alert_ids:
-            raise ReviewNotFoundError(f"Alert {row_id} does not exist")
+    def _default_review(self, record_key: str) -> dict:
+        if record_key not in self._alerts:
+            raise ReviewNotFoundError(f"Alert {record_key} does not exist")
         return {
-            "row_id": row_id,
+            "record_key": record_key,
+            "row_id": self._alerts[record_key],
             "review_status": "pending",
             "review_outcome": "",
             "reviewer": "",
@@ -160,33 +252,43 @@ class ReviewStore:
             "updated_at": "",
         }
 
-    def get_review(self, row_id: int) -> dict:
-        if row_id not in self._alert_ids:
-            raise ReviewNotFoundError(f"Alert {row_id} does not exist")
+    def get_review(self, record_key: str) -> dict:
+        if record_key not in self._alerts:
+            raise ReviewNotFoundError(f"Alert {record_key} does not exist")
         with self.connect() as connection:
             row = connection.execute(
-                "SELECT * FROM reviews WHERE row_id = ?", (row_id,)
+                "SELECT * FROM review_records WHERE record_key = ?", (record_key,)
             ).fetchone()
-        return dict(row) if row else self._default_review(row_id)
+        if not row:
+            return self._default_review(record_key)
+        result = dict(row)
+        result["row_id"] = self._alerts[record_key]
+        return result
 
     def list_reviews(self) -> list[dict]:
         with self.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM reviews ORDER BY updated_at DESC, row_id"
+                "SELECT * FROM review_records ORDER BY updated_at DESC, record_key"
             ).fetchall()
-        return [dict(row) for row in rows]
+        results = []
+        for row in rows:
+            result = dict(row)
+            if result["record_key"] in self._alerts:
+                result["row_id"] = self._alerts[result["record_key"]]
+                results.append(result)
+        return results
 
-    def get_history(self, row_id: int) -> list[dict]:
-        if row_id not in self._alert_ids:
-            raise ReviewNotFoundError(f"Alert {row_id} does not exist")
+    def get_history(self, record_key: str) -> list[dict]:
+        if record_key not in self._alerts:
+            raise ReviewNotFoundError(f"Alert {record_key} does not exist")
         with self.connect() as connection:
             rows = connection.execute(
                 """
-                SELECT * FROM review_events
-                WHERE row_id = ?
+                SELECT * FROM review_events_v2
+                WHERE record_key = ?
                 ORDER BY event_id DESC
                 """,
-                (row_id,),
+                (record_key,),
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -212,9 +314,7 @@ class ReviewStore:
         if status == "pending" and outcome:
             raise ReviewValidationError("Pending alerts cannot have an outcome")
         if status == "in_review" and outcome not in {"", "needs_more_information"}:
-            raise ReviewValidationError(
-                "Final outcomes require resolved status"
-            )
+            raise ReviewValidationError("Final outcomes require resolved status")
         if status == "resolved":
             if outcome not in FINAL_OUTCOMES:
                 raise ReviewValidationError(
@@ -227,10 +327,10 @@ class ReviewStore:
                     "Resolved alerts require a confidence level"
                 )
 
-    def update_review(self, row_id: int, update: dict) -> dict:
-        if row_id not in self._alert_ids:
-            raise ReviewNotFoundError(f"Alert {row_id} does not exist")
-        previous = self.get_review(row_id)
+    def update_review(self, record_key: str, update: dict) -> dict:
+        if record_key not in self._alerts:
+            raise ReviewNotFoundError(f"Alert {record_key} does not exist")
+        previous = self.get_review(record_key)
         expected_version = int(update.pop("expected_version"))
         if expected_version != previous["version"]:
             raise ReviewConflictError(
@@ -254,7 +354,8 @@ class ReviewStore:
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = connection.execute(
-                "SELECT version FROM reviews WHERE row_id = ?", (row_id,)
+                "SELECT version FROM review_records WHERE record_key = ?",
+                (record_key,),
             ).fetchone()
             current_version = int(current["version"]) if current else 0
             if current_version != expected_version:
@@ -266,12 +367,13 @@ class ReviewStore:
 
             connection.execute(
                 """
-                INSERT INTO reviews (
-                    row_id, review_status, review_outcome, reviewer,
-                    review_notes, reviewed_at, review_confidence,
-                    evidence_url, version, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(row_id) DO UPDATE SET
+                INSERT INTO review_records (
+                    record_key, row_id, review_status, review_outcome, reviewer,
+                    review_notes, reviewed_at, review_confidence, evidence_url,
+                    version, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(record_key) DO UPDATE SET
+                    row_id = excluded.row_id,
                     review_status = excluded.review_status,
                     review_outcome = excluded.review_outcome,
                     reviewer = excluded.reviewer,
@@ -283,7 +385,8 @@ class ReviewStore:
                     updated_at = excluded.updated_at
                 """,
                 (
-                    row_id,
+                    record_key,
+                    self._alerts[record_key],
                     normalized["review_status"],
                     normalized["review_outcome"],
                     normalized["reviewer"],
@@ -298,14 +401,14 @@ class ReviewStore:
             )
             connection.execute(
                 """
-                INSERT INTO review_events (
-                    row_id, previous_status, new_status, previous_outcome,
+                INSERT INTO review_events_v2 (
+                    record_key, previous_status, new_status, previous_outcome,
                     new_outcome, actor, event_note, created_at,
                     resulting_version
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    row_id,
+                    record_key,
                     previous["review_status"],
                     normalized["review_status"],
                     previous["review_outcome"],
@@ -317,4 +420,4 @@ class ReviewStore:
                 ),
             )
             connection.commit()
-        return self.get_review(row_id)
+        return self.get_review(record_key)

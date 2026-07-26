@@ -15,6 +15,7 @@ from .config import (
     REVIEW_SAMPLE_FILE,
     REVIEW_SUMMARY_FILE,
 )
+from .validate import stable_record_key
 
 
 VALID_OUTCOMES = {
@@ -25,6 +26,7 @@ VALID_OUTCOMES = {
 }
 VALID_CONFIDENCE = {"high", "medium", "low"}
 REVIEW_COLUMNS = [
+    "record_key",
     "row_id",
     "review_status",
     "review_outcome",
@@ -36,36 +38,53 @@ REVIEW_COLUMNS = [
 ]
 
 
+def _legacy_record_key_map() -> dict:
+    if not ALERT_FILE.exists():
+        return {}
+    alerts = pd.read_csv(ALERT_FILE)
+    if "record_key" not in alerts:
+        alerts["organization"] = "IDA"
+        alerts["record_key"] = alerts.apply(stable_record_key, axis=1)
+    return alerts.set_index("row_id")["record_key"].astype(str).to_dict()
+
+
+def _attach_record_keys(reviews: pd.DataFrame) -> pd.DataFrame:
+    output = reviews.copy()
+    if "record_key" not in output:
+        output["record_key"] = ""
+    missing = output["record_key"].fillna("").astype(str).str.strip().eq("")
+    if missing.any() and "row_id" in output:
+        output.loc[missing, "record_key"] = (
+            output.loc[missing, "row_id"].map(_legacy_record_key_map())
+        )
+    return output.loc[
+        output["record_key"].fillna("").astype(str).str.strip().ne("")
+    ]
+
+
 def load_review_store() -> pd.DataFrame:
     if REVIEW_DATABASE_FILE.exists():
         with sqlite3.connect(REVIEW_DATABASE_FILE) as connection:
-            reviews = pd.read_sql_query(
-                """
-                SELECT
-                    row_id,
-                    review_status,
-                    review_outcome,
-                    reviewer,
-                    review_notes,
-                    reviewed_at,
-                    review_confidence,
-                    evidence_url
-                FROM reviews
-                """,
-                connection,
-                dtype={"row_id": "Int64"},
-            )
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            table = "review_records" if "review_records" in tables else "reviews"
+            reviews = pd.read_sql_query(f"SELECT * FROM {table}", connection)
+        reviews = _attach_record_keys(reviews)
         for column in REVIEW_COLUMNS:
             if column not in reviews:
                 reviews[column] = ""
-        return reviews[REVIEW_COLUMNS].drop_duplicates("row_id", keep="last")
+        return reviews[REVIEW_COLUMNS].drop_duplicates("record_key", keep="last")
     if not REVIEW_FILE.exists():
         return pd.DataFrame(columns=REVIEW_COLUMNS)
-    reviews = pd.read_csv(REVIEW_FILE, dtype={"row_id": "Int64"})
+    reviews = _attach_record_keys(pd.read_csv(REVIEW_FILE))
     for column in REVIEW_COLUMNS:
         if column not in reviews:
             reviews[column] = ""
-    return reviews[REVIEW_COLUMNS].drop_duplicates("row_id", keep="last")
+    return reviews[REVIEW_COLUMNS].drop_duplicates("record_key", keep="last")
 
 
 def merge_review_state(alerts: pd.DataFrame) -> pd.DataFrame:
@@ -76,12 +95,12 @@ def merge_review_state(alerts: pd.DataFrame) -> pd.DataFrame:
         return alerts
 
     output = alerts.copy()
-    review_lookup = reviews.set_index("row_id")
-    for column in REVIEW_COLUMNS[1:]:
+    review_lookup = reviews.set_index("record_key")
+    for column in REVIEW_COLUMNS[2:]:
         output[column] = output.get(
             column, pd.Series("", index=output.index)
         ).fillna("").astype("string")
-        mapped = output["row_id"].map(review_lookup[column])
+        mapped = output["record_key"].map(review_lookup[column])
         populated = mapped.notna() & mapped.astype("string").str.strip().ne("")
         output.loc[populated, column] = mapped.loc[populated].astype("string")
     return output
@@ -101,7 +120,7 @@ def sync_sample_to_review_store(sample: pd.DataFrame) -> pd.DataFrame:
 
     existing = load_review_store()
     combined = pd.concat([existing, updates], ignore_index=True)
-    combined = combined.drop_duplicates("row_id", keep="last")
+    combined = combined.drop_duplicates("record_key", keep="last")
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     combined.to_csv(REVIEW_FILE, index=False)
     return combined
@@ -114,6 +133,8 @@ def create_review_sample(
 ) -> pd.DataFrame:
     if REVIEW_SAMPLE_FILE.exists() and not regenerate:
         sample = pd.read_csv(REVIEW_SAMPLE_FILE)
+        if "record_key" not in sample:
+            sample["record_key"] = sample["row_id"].map(_legacy_record_key_map())
         for column in REVIEW_COLUMNS[1:]:
             if column not in sample:
                 sample[column] = ""

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type Alert = {
   row_id: string;
+  record_key: string;
   country: string;
   region: string;
   category: string;
@@ -34,6 +35,8 @@ type Alert = {
 type RunSummary = {
   run_timestamp_utc: string;
   source_records: number;
+  countries: number;
+  periods: number;
   alerts: number;
   corroborated_alerts: number;
   reviewed_alerts: number;
@@ -59,6 +62,7 @@ type ReviewSummary = {
 };
 
 type ReviewRecord = {
+  record_key: string;
   row_id: number;
   review_status: "pending" | "in_review" | "resolved";
   review_outcome: string;
@@ -72,6 +76,7 @@ type ReviewRecord = {
 
 type ReviewEvent = {
   event_id: number;
+  record_key: string;
   previous_status: string;
   new_status: string;
   previous_outcome: string;
@@ -82,7 +87,8 @@ type ReviewEvent = {
   resulting_version: number;
 };
 
-const REVIEW_API_URL = "http://localhost:8000";
+const REVIEW_API_URL =
+  process.env.NEXT_PUBLIC_REVIEW_API_URL ?? "http://localhost:8000";
 const number = new Intl.NumberFormat("en-US");
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -165,6 +171,7 @@ export default function Dashboard() {
   const [reviewApiStatus, setReviewApiStatus] = useState<"checking" | "online" | "offline">("checking");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState("");
+  const [dataLoadError, setDataLoadError] = useState(false);
   const [reviewForm, setReviewForm] = useState({
     review_outcome: "",
     reviewer: "",
@@ -185,32 +192,35 @@ export default function Dashboard() {
           return response.json() as Promise<ReviewRecord[]>;
         })
         .catch(() => [] as ReviewRecord[]),
-    ]).then(([csv, runData, evaluationData, reviewData, persistedReviews]) => {
-      const parsed = parseCsv(csv);
-      const reviewsById = new Map(
-        persistedReviews.map((record) => [String(record.row_id), record]),
-      );
-      const hydrated = parsed.map((alert) => {
-        const persisted = reviewsById.get(alert.row_id);
-        return persisted
-          ? {
-              ...alert,
-              review_status: persisted.review_status,
-              review_outcome: persisted.review_outcome,
-              reviewer: persisted.reviewer,
-              review_notes: persisted.review_notes,
-              reviewed_at: persisted.reviewed_at,
-              review_confidence: persisted.review_confidence,
-              evidence_url: persisted.evidence_url,
-            }
-          : alert;
-      });
-      setAlerts(hydrated);
-      setSelectedId(parsed[0]?.row_id ?? "");
-      setRun(runData);
-      setEvaluation(evaluationData);
-      setReview(reviewData);
-    });
+    ])
+      .then(([csv, runData, evaluationData, reviewData, persistedReviews]) => {
+        const parsed = parseCsv(csv);
+        const reviewsById = new Map(
+          persistedReviews.map((record) => [record.record_key, record]),
+        );
+        const hydrated = parsed.map((alert) => {
+          const persisted = reviewsById.get(alert.record_key);
+          return persisted
+            ? {
+                ...alert,
+                review_status: persisted.review_status,
+                review_outcome: persisted.review_outcome,
+                reviewer: persisted.reviewer,
+                review_notes: persisted.review_notes,
+                reviewed_at: persisted.reviewed_at,
+                review_confidence: persisted.review_confidence,
+                evidence_url: persisted.evidence_url,
+              }
+            : alert;
+        });
+        setAlerts(hydrated);
+        setSelectedId(hydrated[0]?.record_key ?? "");
+        setRun(runData);
+        setEvaluation(evaluationData);
+        setReview(reviewData);
+        setDataLoadError(false);
+      })
+      .catch(() => setDataLoadError(true));
   }, []);
 
   const filtered = useMemo(() => {
@@ -238,17 +248,18 @@ export default function Dashboard() {
       });
   }, [alerts, severity, period, reviewStatus, query, sort]);
 
-  const selected = alerts.find((alert) => alert.row_id === selectedId) ?? filtered[0];
+  const selected =
+    alerts.find((alert) => alert.record_key === selectedId) ?? filtered[0];
 
   useEffect(() => {
     if (!selected) return;
     let active = true;
     Promise.all([
-      fetch(`${REVIEW_API_URL}/api/reviews/${selected.row_id}`).then((response) => {
+      fetch(`${REVIEW_API_URL}/api/reviews/${selected.record_key}`).then((response) => {
         if (!response.ok) throw new Error("Review API unavailable");
         return response.json();
       }),
-      fetch(`${REVIEW_API_URL}/api/reviews/${selected.row_id}/history`).then((response) => {
+      fetch(`${REVIEW_API_URL}/api/reviews/${selected.record_key}/history`).then((response) => {
         if (!response.ok) throw new Error("Review history unavailable");
         return response.json();
       }),
@@ -305,7 +316,7 @@ export default function Dashboard() {
       expected_version: liveReview.version,
     };
     try {
-      const response = await fetch(`${REVIEW_API_URL}/api/reviews/${selected.row_id}`, {
+      const response = await fetch(`${REVIEW_API_URL}/api/reviews/${selected.record_key}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -325,7 +336,7 @@ export default function Dashboard() {
       });
       setAlerts((current) =>
         current.map((alert) =>
-          alert.row_id === selected.row_id
+          alert.record_key === selected.record_key
             ? {
                 ...alert,
                 review_status: updated.review_status,
@@ -340,7 +351,7 @@ export default function Dashboard() {
         ),
       );
       const historyResponse = await fetch(
-        `${REVIEW_API_URL}/api/reviews/${selected.row_id}/history`,
+        `${REVIEW_API_URL}/api/reviews/${selected.record_key}/history`,
       );
       if (historyResponse.ok) setReviewHistory(await historyResponse.json());
     } catch (error) {
@@ -380,6 +391,16 @@ export default function Dashboard() {
   const resolvedRate = liveReviewSummary.sampleSize
     ? Math.round((liveReviewSummary.resolved / liveReviewSummary.sampleSize) * 100)
     : 0;
+  const runAgeDays = run
+    ? (Date.now() - new Date(run.run_timestamp_utc).getTime()) / 86_400_000
+    : null;
+  const pipelineState = dataLoadError
+    ? { label: "Data unavailable", tone: "error" }
+    : runAgeDays === null
+      ? { label: "Loading run metadata", tone: "loading" }
+      : runAgeDays > 7
+        ? { label: "Pipeline snapshot stale", tone: "stale" }
+        : { label: "Latest run available", tone: "healthy" };
   const totalSignals = run
     ? Object.values(run.alerts_by_detector).reduce((sum, current) => sum + current, 0)
     : 0;
@@ -491,10 +512,10 @@ export default function Dashboard() {
                 : "Evaluate how data, rules, statistics, and machine learning work together to protect report quality."}
             </p>
           </div>
-          <div className="run-status">
+          <div className={`run-status ${pipelineState.tone}`}>
             <i />
             <div>
-              <strong>Pipeline healthy</strong>
+              <strong>{pipelineState.label}</strong>
               <span>
                 Updated {run ? new Date(run.run_timestamp_utc).toLocaleString("en-US", {
                   month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
@@ -510,7 +531,11 @@ export default function Dashboard() {
               <article className="metric primary">
                 <span>Records monitored</span>
                 <strong>{run ? number.format(run.source_records) : "—"}</strong>
-                <small>14 reporting periods · 202 entities</small>
+                <small>
+                  {run
+                    ? `${number.format(run.periods)} reporting periods · ${number.format(run.countries)} entities`
+                    : "Dataset coverage unavailable"}
+                </small>
               </article>
               <article className="metric">
                 <span>Open alerts</span>
@@ -721,9 +746,9 @@ export default function Dashboard() {
                     <tbody>
                       {filtered.slice(0, 80).map((alert) => (
                         <tr
-                          key={alert.row_id}
-                          className={selected?.row_id === alert.row_id ? "selected" : ""}
-                          onClick={() => setSelectedId(alert.row_id)}
+                          key={alert.record_key}
+                          className={selected?.record_key === alert.record_key ? "selected" : ""}
+                          onClick={() => setSelectedId(alert.record_key)}
                         >
                           <td><span className={`severity-pill ${alert.severity}`}>{alert.severity}</span></td>
                           <td>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 
 import numpy as np
 import pandas as pd
@@ -20,8 +21,19 @@ class ValidationResult:
     alerts: pd.DataFrame
 
 
+def stable_record_key(row: pd.Series) -> str:
+    """Return a deterministic identifier for the documented financial grain."""
+    normalized = [
+        str(row.get(column, "")).strip().casefold()
+        for column in GRAIN_COLUMNS
+    ]
+    digest = sha256("\x1f".join(normalized).encode("utf-8")).hexdigest()
+    return f"ida_{digest[:20]}"
+
+
 def _alert(
     row_id: int | str,
+    record_key: str,
     severity: str,
     reason_code: str,
     message: str,
@@ -31,6 +43,7 @@ def _alert(
 ) -> dict:
     return {
         "row_id": row_id,
+        "record_key": record_key,
         "severity": severity,
         "reason_code": reason_code,
         "detector": detector,
@@ -51,14 +64,22 @@ def validate_and_clean(source: pd.DataFrame) -> ValidationResult:
     df = df[REQUIRED_COLUMNS].copy()
     df.insert(0, "row_id", np.arange(len(df)))
 
+    key_columns = ["category", "country", "organization", "region", "time_period"]
+    for column in key_columns:
+        df[column] = df[column].astype("string").str.strip()
+    df.insert(1, "record_key", df.apply(stable_record_key, axis=1))
+
     for column in AMOUNT_COLUMNS:
         original = df[column]
         df[column] = pd.to_numeric(original, errors="coerce")
         invalid = df[column].isna()
-        for row in df.loc[invalid, ["row_id"]].itertuples(index=False):
+        for row in df.loc[
+            invalid, ["row_id", "record_key"]
+        ].itertuples(index=False):
             alerts.append(
                 _alert(
                     row.row_id,
+                    row.record_key,
                     "critical",
                     "INVALID_AMOUNT",
                     f"{column} is missing or non-numeric.",
@@ -67,13 +88,15 @@ def validate_and_clean(source: pd.DataFrame) -> ValidationResult:
                 )
             )
 
-    for column in ["category", "country", "organization", "region", "time_period"]:
-        df[column] = df[column].astype("string").str.strip()
+    for column in key_columns:
         missing = df[column].isna() | df[column].eq("")
-        for row in df.loc[missing, ["row_id"]].itertuples(index=False):
+        for row in df.loc[
+            missing, ["row_id", "record_key"]
+        ].itertuples(index=False):
             alerts.append(
                 _alert(
                     row.row_id,
+                    row.record_key,
                     "critical",
                     "MISSING_KEY",
                     f"Required key field {column} is blank.",
@@ -83,10 +106,13 @@ def validate_and_clean(source: pd.DataFrame) -> ValidationResult:
             )
 
     invalid_category = ~df["category"].isin(VALID_CATEGORIES)
-    for row in df.loc[invalid_category, ["row_id", "category"]].itertuples(index=False):
+    for row in df.loc[
+        invalid_category, ["row_id", "record_key", "category"]
+    ].itertuples(index=False):
         alerts.append(
             _alert(
                 row.row_id,
+                row.record_key,
                 "high",
                 "INVALID_CATEGORY",
                 "Financial category is outside the controlled vocabulary.",
@@ -96,13 +122,16 @@ def validate_and_clean(source: pd.DataFrame) -> ValidationResult:
         )
 
     duplicate_mask = df.duplicated(GRAIN_COLUMNS, keep=False)
-    for row in df.loc[duplicate_mask, ["row_id", *GRAIN_COLUMNS]].itertuples(index=False):
+    for row in df.loc[
+        duplicate_mask, ["row_id", "record_key", *GRAIN_COLUMNS]
+    ].itertuples(index=False):
         evidence = ", ".join(
             f"{column}={getattr(row, column)}" for column in GRAIN_COLUMNS
         )
         alerts.append(
             _alert(
                 row.row_id,
+                row.record_key,
                 "critical",
                 "DUPLICATE_GRAIN",
                 "Multiple records share the expected reporting grain.",
@@ -113,10 +142,13 @@ def validate_and_clean(source: pd.DataFrame) -> ValidationResult:
 
     for column in AMOUNT_COLUMNS:
         negative = df[column] < 0
-        for row in df.loc[negative, ["row_id", column]].itertuples(index=False):
+        for row in df.loc[
+            negative, ["row_id", "record_key", column]
+        ].itertuples(index=False):
             alerts.append(
                 _alert(
                     row.row_id,
+                    row.record_key,
                     "medium",
                     "NEGATIVE_AMOUNT",
                     f"{column} is negative and may represent a correction or reversal.",
@@ -135,6 +167,7 @@ def validate_and_clean(source: pd.DataFrame) -> ValidationResult:
         alerts.append(
             _alert(
                 df.at[idx, "row_id"],
+                df.at[idx, "record_key"],
                 "critical",
                 "TOTAL_MISMATCH",
                 "Reported total does not reconcile to financing components.",
@@ -158,10 +191,13 @@ def validate_and_clean(source: pd.DataFrame) -> ValidationResult:
     ).astype("string")
     period_parts.loc[annual_mask, "quarter"] = "4"
     invalid_period = period_parts.isna().any(axis=1)
-    for row in df.loc[invalid_period, ["row_id", "time_period"]].itertuples(index=False):
+    for row in df.loc[
+        invalid_period, ["row_id", "record_key", "time_period"]
+    ].itertuples(index=False):
         alerts.append(
             _alert(
                 row.row_id,
+                row.record_key,
                 "high",
                 "INVALID_PERIOD",
                 "Time period does not follow YYYY-Qn.",

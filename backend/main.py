@@ -31,7 +31,11 @@ class ReviewUpdate(BaseModel):
     expected_version: int = Field(ge=0)
 
 
-def create_app(database_path: Path = DATABASE_PATH) -> FastAPI:
+def create_app(
+    database_path: Path = DATABASE_PATH,
+    alerts_path: Path = ROOT / "artifacts" / "alerts.csv",
+    seed_reviews_path: Path | None = ROOT / "artifacts" / "reviews.csv",
+) -> FastAPI:
     app = FastAPI(
         title="IDA Financial Data Control Tower Review API",
         version="0.1.0",
@@ -50,8 +54,8 @@ def create_app(database_path: Path = DATABASE_PATH) -> FastAPI:
     )
     store = ReviewStore(
         database_path=database_path,
-        alerts_path=ROOT / "artifacts" / "alerts.csv",
-        seed_reviews_path=ROOT / "artifacts" / "reviews.csv",
+        alerts_path=alerts_path,
+        seed_reviews_path=seed_reviews_path,
     )
     app.state.review_store = store
 
@@ -72,24 +76,24 @@ def create_app(database_path: Path = DATABASE_PATH) -> FastAPI:
     def list_reviews() -> list[dict]:
         return store.list_reviews()
 
-    @app.get("/api/reviews/{row_id}")
-    def get_review(row_id: int) -> dict:
+    @app.get("/api/reviews/{record_key}")
+    def get_review(record_key: str) -> dict:
         try:
-            return store.get_review(row_id)
+            return store.get_review(record_key)
         except ReviewNotFoundError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
 
-    @app.get("/api/reviews/{row_id}/history")
-    def get_review_history(row_id: int) -> list[dict]:
+    @app.get("/api/reviews/{record_key}/history")
+    def get_review_history(record_key: str) -> list[dict]:
         try:
-            return store.get_history(row_id)
+            return store.get_history(record_key)
         except ReviewNotFoundError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
 
-    @app.put("/api/reviews/{row_id}")
-    def update_review(row_id: int, payload: ReviewUpdate) -> dict:
+    @app.put("/api/reviews/{record_key}")
+    def update_review(record_key: str, payload: ReviewUpdate) -> dict:
         try:
-            return store.update_review(row_id, payload.model_dump())
+            return store.update_review(record_key, payload.model_dump())
         except ReviewNotFoundError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
         except ReviewValidationError as error:

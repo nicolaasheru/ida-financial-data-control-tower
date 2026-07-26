@@ -38,9 +38,9 @@ Pending → In Review → Resolved
 | --- | --- | --- |
 | GET | `/health` | Service health |
 | GET | `/api/reviews` | Persisted review records |
-| GET | `/api/reviews/{row_id}` | Current review or default pending state |
-| GET | `/api/reviews/{row_id}/history` | Append-only audit history |
-| PUT | `/api/reviews/{row_id}` | Validated versioned review update |
+| GET | `/api/reviews/{record_key}` | Current review or default pending state |
+| GET | `/api/reviews/{record_key}/history` | Append-only audit history |
+| PUT | `/api/reviews/{record_key}` | Validated versioned review update |
 
 ## Local operation
 
@@ -60,3 +60,9 @@ available at `/docs`. Vite prints the dashboard URL in the terminal.
 SQLite is intentionally local. The Azure design will replace it with Azure
 Database for PostgreSQL while preserving the API contract, transition rules,
 version checks, and audit-event model.
+
+The local API intentionally has no user authentication. The reviewer field is
+free text and is therefore suitable only for a single-user demonstration. A
+production implementation would authenticate through Microsoft Entra ID and
+derive reviewer identity from a verified token claim rather than accepting a
+client-supplied name.

@@ -43,6 +43,22 @@ presentation.
 The initial contamination assumption remains 2% within each segment and must be
 recalibrated from manual-review evidence.
 
+Isolation Forest uses a fixed random state, so identical input produces
+identical output. The model is currently refit in batch mode and its normalized
+scores are relative to the current segment distribution; alert-score changes
+across different data snapshots are therefore expected and must be interpreted
+with the recorded run configuration rather than treated as directly comparable
+time-series values.
+
+## Stable record identity
+
+`record_key` is a deterministic SHA-256-derived identifier based on the
+documented grain: organization, country, category, and time period. Analyst
+reviews, API routes, and audit events use this stable key. `row_id` remains a
+positional source-row reference for display only. Regression tests verify that
+reordering records or appending a new record does not change the identity of an
+existing financial grain.
+
 ## Financial interpretation
 
 The ratio is:

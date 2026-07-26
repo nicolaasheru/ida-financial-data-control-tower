@@ -14,7 +14,14 @@ from .config import (
     RUN_SUMMARY_FILE,
     SIGNAL_FILE,
 )
-from .detect import detect_isolation_forest, detect_statistical
+from .detect import (
+    ISOLATION_FOREST_CONTAMINATION,
+    ISOLATION_FOREST_ESTIMATORS,
+    ISOLATION_FOREST_RANDOM_STATE,
+    MODEL_FEATURES,
+    detect_isolation_forest,
+    detect_statistical,
+)
 from .features import engineer_features
 from .ingest import load_raw
 from .review import merge_review_state
@@ -23,6 +30,7 @@ from .validate import validate_and_clean
 
 CONTEXT_COLUMNS = [
     "row_id",
+    "record_key",
     "country",
     "region",
     "entity_type",
@@ -51,8 +59,8 @@ def _add_context(signals: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
         return signals
     context = features[
         CONTEXT_COLUMNS
-    ].drop_duplicates("row_id")
-    enriched = signals.merge(context, on="row_id", how="inner")
+    ].drop_duplicates(["row_id", "record_key"])
+    enriched = signals.merge(context, on=["row_id", "record_key"], how="inner")
     enriched["current_amount_usd_m"] = enriched["total"]
     enriched["comparison_amount_usd_m"] = enriched["previous_year_total"]
     enriched["change_amount_usd_m"] = (
@@ -114,16 +122,17 @@ def build_analyst_queue(signals: pd.DataFrame) -> pd.DataFrame:
         return signals
 
     records = []
-    for row_id, group in signals.groupby("row_id", sort=False):
+    for record_key, group in signals.groupby("record_key", sort=False):
         first = group.iloc[0]
         record = {
             column: first.get(column)
             for column in CONTEXT_COLUMNS
-            if column != "row_id"
+            if column not in {"row_id", "record_key"}
         }
         record.update(
             {
-                "row_id": int(row_id),
+                "row_id": int(first.get("row_id")),
+                "record_key": str(record_key),
                 "severity": _final_severity(group),
                 "reason_codes": _join_unique(group["reason_code"]),
                 "detectors": _join_unique(group["detector"]),
@@ -213,6 +222,15 @@ def run(refresh: bool = False) -> dict:
         "alerts_by_detector": (
             signals["detector"].value_counts().to_dict() if not signals.empty else {}
         ),
+        "model_run": {
+            "algorithm": "IsolationForest",
+            "segments": "period_type × category; country records only",
+            "features": MODEL_FEATURES,
+            "n_estimators": ISOLATION_FOREST_ESTIMATORS,
+            "contamination": ISOLATION_FOREST_CONTAMINATION,
+            "random_state": ISOLATION_FOREST_RANDOM_STATE,
+            "score_scope": "batch-relative within each segment",
+        },
     }
     RUN_SUMMARY_FILE.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return summary

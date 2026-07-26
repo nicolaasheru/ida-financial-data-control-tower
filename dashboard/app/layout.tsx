@@ -13,11 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Starter Project",
-  description: "A clean starting point for building your site.",
-  other: {
-    "codex-preview": "development",
-  },
+  title: "IDA Financial Data Control Tower",
+  description:
+    "An independent financial-data assurance prototype using public World Bank IDA data.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

@@ -63,6 +63,19 @@ Key outputs:
 - `artifacts/review_summary.json`: review coverage and caveated rate estimates.
 - `artifacts/run_summary.json`: run-level volumes and severity distribution.
 
+Method references:
+
+- [`docs/model_card.md`](docs/model_card.md)
+- [`docs/data_dictionary.md`](docs/data_dictionary.md)
+- [`docs/critical_alert_review.md`](docs/critical_alert_review.md)
+- [`docs/design.md`](docs/design.md)
+
+Every logical financial record receives a deterministic `record_key` derived
+from organization, country, category, and time period. The positional `row_id`
+is retained only as a readable source-row reference; review decisions and audit
+history use `record_key`, so reordering or appending source records cannot
+silently move a decision to another financial grain.
+
 ## Analyst dashboard
 
 Phase 1 adds a functional dashboard in `dashboard/`. It reads the actual pipeline
@@ -143,3 +156,17 @@ substitute for validation by an IDA financial-data specialist.
 This is an independent portfolio prototype using publicly available World Bank
 data. It is not an official World Bank Group system and does not use internal WBG
 infrastructure or non-public financial records.
+
+## Known limitations
+
+- The review API is a local, unauthenticated demonstration. Reviewer names are
+  free text; production identity would come from Microsoft Entra ID claims.
+- Isolation Forest is refit in deterministic batch mode. Scores are normalized
+  relative to each run's segment and should not be compared across runs without
+  model and dataset version context.
+- The 2% contamination value is a documented starting assumption pending
+  calibration with a larger expert-reviewed sample.
+- Controlled fault injection is a deterministic control-harness check, not an
+  estimate of production accuracy.
+- Public data cannot reproduce internal IDA replenishment, forecasting,
+  approval, or downstream-reporting workflows.

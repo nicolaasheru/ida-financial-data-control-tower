@@ -1,5 +1,5 @@
 {
-  "run_timestamp_utc": "2026-07-26T06:33:31.263331+00:00",
+  "run_timestamp_utc": "2026-07-26T08:53:58.428140+00:00",
   "source_records": 3420,
   "ida_records": 3420,
   "countries": 202,
@@ -18,5 +18,24 @@
     "isolation_forest": 65,
     "statistical_process_control": 58,
     "rule": 53
+  },
+  "model_run": {
+    "algorithm": "IsolationForest",
+    "segments": "period_type \u00d7 category; country records only",
+    "features": [
+      "log1p_total",
+      "development_policy_share",
+      "investment_lending_share",
+      "others_share",
+      "program_for_results_share",
+      "relative_change",
+      "year_over_year_change",
+      "disbursement_commitment_ratio",
+      "quarter"
+    ],
+    "n_estimators": 300,
+    "contamination": 0.02,
+    "random_state": 42,
+    "score_scope": "batch-relative within each segment"
   }
 }

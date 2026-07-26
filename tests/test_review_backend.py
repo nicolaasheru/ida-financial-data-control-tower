@@ -1,4 +1,5 @@
 import csv
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,9 +21,17 @@ class ReviewStoreTests(unittest.TestCase):
         root = Path(self.temp_dir.name)
         self.alerts_path = root / "alerts.csv"
         with self.alerts_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=["row_id", "country"])
+            writer = csv.DictWriter(
+                handle, fieldnames=["record_key", "row_id", "country"]
+            )
             writer.writeheader()
-            writer.writerow({"row_id": 101, "country": "Test Economy"})
+            writer.writerow(
+                {
+                    "record_key": "ida_test_economy",
+                    "row_id": 101,
+                    "country": "Test Economy",
+                }
+            )
         self.store = ReviewStore(
             database_path=root / "reviews.sqlite3",
             alerts_path=self.alerts_path,
@@ -46,17 +55,17 @@ class ReviewStoreTests(unittest.TestCase):
 
     def test_unknown_alert_is_rejected(self):
         with self.assertRaises(ReviewNotFoundError):
-            self.store.get_review(999)
+            self.store.get_review("ida_missing")
 
     def test_pending_alert_can_enter_review(self):
-        result = self.store.update_review(101, self.payload())
+        result = self.store.update_review("ida_test_economy", self.payload())
         self.assertEqual(result["review_status"], "in_review")
         self.assertEqual(result["version"], 1)
 
     def test_pending_alert_cannot_resolve_directly(self):
         with self.assertRaises(ReviewValidationError):
             self.store.update_review(
-                101,
+                "ida_test_economy",
                 self.payload(
                     review_status="resolved",
                     review_outcome="legitimate_exception",
@@ -65,10 +74,10 @@ class ReviewStoreTests(unittest.TestCase):
             )
 
     def test_resolved_alert_requires_notes_and_confidence(self):
-        in_review = self.store.update_review(101, self.payload())
+        in_review = self.store.update_review("ida_test_economy", self.payload())
         with self.assertRaises(ReviewValidationError):
             self.store.update_review(
-                101,
+                "ida_test_economy",
                 self.payload(
                     review_status="resolved",
                     review_outcome="confirmed_data_issue",
@@ -81,19 +90,21 @@ class ReviewStoreTests(unittest.TestCase):
     def test_final_outcome_requires_resolved_status(self):
         with self.assertRaises(ReviewValidationError):
             self.store.update_review(
-                101,
+                "ida_test_economy",
                 self.payload(review_outcome="false_positive"),
             )
 
     def test_stale_version_is_rejected(self):
-        self.store.update_review(101, self.payload())
+        self.store.update_review("ida_test_economy", self.payload())
         with self.assertRaises(ReviewConflictError):
-            self.store.update_review(101, self.payload(expected_version=0))
+            self.store.update_review(
+                "ida_test_economy", self.payload(expected_version=0)
+            )
 
     def test_audit_history_records_every_update(self):
-        first = self.store.update_review(101, self.payload())
+        first = self.store.update_review("ida_test_economy", self.payload())
         self.store.update_review(
-            101,
+            "ida_test_economy",
             self.payload(
                 review_status="resolved",
                 review_outcome="legitimate_exception",
@@ -103,17 +114,102 @@ class ReviewStoreTests(unittest.TestCase):
                 expected_version=first["version"],
             ),
         )
-        history = self.store.get_history(101)
+        history = self.store.get_history("ida_test_economy")
         self.assertEqual(len(history), 2)
         self.assertEqual(history[0]["new_status"], "resolved")
         self.assertEqual(history[1]["new_status"], "in_review")
+
+    def test_legacy_integer_review_migrates_to_stable_record_key(self):
+        root = Path(self.temp_dir.name)
+        legacy_database = root / "legacy.sqlite3"
+        with sqlite3.connect(legacy_database) as connection:
+            connection.execute(
+                """
+                CREATE TABLE reviews (
+                    row_id INTEGER PRIMARY KEY,
+                    review_status TEXT NOT NULL,
+                    review_outcome TEXT NOT NULL,
+                    reviewer TEXT NOT NULL,
+                    review_notes TEXT NOT NULL,
+                    reviewed_at TEXT NOT NULL,
+                    review_confidence TEXT NOT NULL,
+                    evidence_url TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO reviews VALUES (
+                    101, 'resolved', 'legitimate_exception',
+                    'Legacy Analyst', 'Verified legacy decision.',
+                    '2026-07-26T00:00:00Z', 'high', '', 2,
+                    '2026-07-26T00:00:00Z', '2026-07-26T00:00:00Z'
+                )
+                """
+            )
+        migrated = ReviewStore(
+            database_path=legacy_database,
+            alerts_path=self.alerts_path,
+        )
+        record = migrated.get_review("ida_test_economy")
+        self.assertEqual(record["review_status"], "resolved")
+        self.assertEqual(record["reviewer"], "Legacy Analyst")
 
 
 class ReviewApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
-        database_path = Path(self.temp_dir.name) / "api-reviews.sqlite3"
-        self.client = TestClient(create_app(database_path))
+        root = Path(self.temp_dir.name)
+        database_path = root / "api-reviews.sqlite3"
+        alerts_path = root / "alerts.csv"
+        with alerts_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=["record_key", "row_id", "country"]
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "record_key": "ida_api_test",
+                    "row_id": 2159,
+                    "country": "Test Economy",
+                }
+            )
+        reviews_path = root / "reviews.csv"
+        with reviews_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "record_key",
+                    "row_id",
+                    "review_status",
+                    "review_outcome",
+                    "reviewer",
+                    "review_notes",
+                    "reviewed_at",
+                    "review_confidence",
+                    "evidence_url",
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "record_key": "ida_api_test",
+                    "row_id": 2159,
+                    "review_status": "resolved",
+                    "review_outcome": "legitimate_exception",
+                    "reviewer": "Fixture Analyst",
+                    "review_notes": "Verified fixture.",
+                    "reviewed_at": "2026-07-26T00:00:00Z",
+                    "review_confidence": "high",
+                    "evidence_url": "",
+                }
+            )
+        self.client = TestClient(
+            create_app(database_path, alerts_path, reviews_path)
+        )
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -129,11 +225,11 @@ class ReviewApiTests(unittest.TestCase):
         self.assertEqual(response.json()["documentation"], "/docs")
 
     def test_missing_alert_returns_404(self):
-        response = self.client.get("/api/reviews/999999")
+        response = self.client.get("/api/reviews/ida_missing")
         self.assertEqual(response.status_code, 404)
 
     def test_seeded_review_is_available(self):
-        response = self.client.get("/api/reviews/2159")
+        response = self.client.get("/api/reviews/ida_api_test")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["review_status"], "resolved")
 

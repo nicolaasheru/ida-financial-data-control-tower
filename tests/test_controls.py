@@ -2,6 +2,7 @@ import unittest
 
 import pandas as pd
 
+from src.detect import MODEL_FEATURES, detect_isolation_forest
 from src.features import engineer_features
 from src.pipeline import build_analyst_queue
 from src.review import merge_review_state
@@ -41,6 +42,29 @@ class FinancialControlTests(unittest.TestCase):
         result = validate_and_clean(pd.DataFrame([record, record]))
         self.assertEqual(
             result.alerts["reason_code"].tolist().count("DUPLICATE_GRAIN"), 2
+        )
+
+    def test_record_key_is_stable_when_source_order_changes(self):
+        first = self.base_record()
+        second = self.base_record()
+        second["country"] = "Another Economy"
+        original = validate_and_clean(pd.DataFrame([first, second])).clean
+        reordered = validate_and_clean(pd.DataFrame([second, first])).clean
+        original_keys = original.set_index("country")["record_key"].to_dict()
+        reordered_keys = reordered.set_index("country")["record_key"].to_dict()
+        self.assertEqual(original_keys, reordered_keys)
+
+    def test_record_key_is_stable_when_a_new_record_is_appended(self):
+        original_record = self.base_record()
+        original = validate_and_clean(pd.DataFrame([original_record])).clean
+        appended_record = self.base_record()
+        appended_record["country"] = "New Economy"
+        appended = validate_and_clean(
+            pd.DataFrame([original_record, appended_record])
+        ).clean
+        self.assertEqual(
+            original.iloc[0]["record_key"],
+            appended.loc[appended["country"].eq("Test Economy"), "record_key"].iloc[0],
         )
 
     def test_annual_and_quarterly_history_do_not_mix(self):
@@ -92,6 +116,7 @@ class FinancialControlTests(unittest.TestCase):
             [
                 {
                     "row_id": 1,
+                    "record_key": "ida_test",
                     "severity": "high",
                     "reason_code": "MULTIVARIATE_ANOMALY",
                     "detector": "isolation_forest",
@@ -108,6 +133,7 @@ class FinancialControlTests(unittest.TestCase):
             [
                 {
                     "row_id": 1,
+                    "record_key": "ida_test",
                     "severity": "medium",
                     "reason_code": "A",
                     "detector": "isolation_forest",
@@ -116,6 +142,7 @@ class FinancialControlTests(unittest.TestCase):
                 },
                 {
                     "row_id": 1,
+                    "record_key": "ida_test",
                     "severity": "medium",
                     "reason_code": "B",
                     "detector": "statistical_process_control",
@@ -133,6 +160,7 @@ class FinancialControlTests(unittest.TestCase):
             [
                 {
                     "row_id": 1,
+                    "record_key": "ida_test",
                     "severity": "medium",
                     "reason_code": "TOTAL_MISMATCH",
                     "detector": "rule",
@@ -150,6 +178,7 @@ class FinancialControlTests(unittest.TestCase):
             [
                 {
                     "row_id": 1,
+                    "record_key": "ida_test",
                     "severity": "medium",
                     "reason_code": "A",
                     "detector": "rule",
@@ -172,6 +201,7 @@ class FinancialControlTests(unittest.TestCase):
             [
                 {
                     "row_id": 1,
+                    "record_key": "ida_test",
                     "severity": "medium",
                     "reason_code": "A",
                     "detector": "rule",
@@ -183,6 +213,31 @@ class FinancialControlTests(unittest.TestCase):
         queue = build_analyst_queue(signal)
         merged = merge_review_state(queue)
         self.assertEqual(merged.iloc[0]["review_status"], "pending")
+
+    def test_isolation_forest_is_deterministic_for_identical_input(self):
+        rows = []
+        for index in range(40):
+            row = {
+                "row_id": index,
+                "record_key": f"ida_fixture_{index}",
+                "entity_type": "country",
+                "period_type": "annual",
+                "category": "Commitments",
+                "materiality_percentile": index / 39,
+            }
+            for feature_index, feature in enumerate(MODEL_FEATURES):
+                row[feature] = float(index + feature_index) / 10
+            rows.append(row)
+        rows[-1]["relative_change"] = 500.0
+        fixture = pd.DataFrame(rows)
+
+        first, _ = detect_isolation_forest(fixture)
+        second, _ = detect_isolation_forest(fixture)
+        columns = ["record_key", "anomaly_score", "model_segment"]
+        pd.testing.assert_frame_equal(
+            first[columns].reset_index(drop=True),
+            second[columns].reset_index(drop=True),
+        )
 
 
 if __name__ == "__main__":
