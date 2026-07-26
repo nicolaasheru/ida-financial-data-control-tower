@@ -182,6 +182,63 @@ export default function Dashboard() {
   const totalSignals = run
     ? Object.values(run.alerts_by_detector).reduce((sum, current) => sum + current, 0)
     : 0;
+  const trendData = useMemo(() => {
+    const periods = new Map<string, { critical: number; high: number; medium: number }>();
+    alerts
+      .filter((alert) => alert.period_type === "annual")
+      .forEach((alert) => {
+        const current = periods.get(alert.time_period) ?? { critical: 0, high: 0, medium: 0 };
+        current[alert.severity] += 1;
+        periods.set(alert.time_period, current);
+      });
+    return [...periods.entries()]
+      .sort(([a], [b]) => Number(a.replace("FY", "")) - Number(b.replace("FY", "")))
+      .map(([name, values]) => ({ name, ...values, total: values.critical + values.high + values.medium }));
+  }, [alerts]);
+
+  const regionalData = useMemo(() => {
+    const regions = new Map<string, { critical: number; high: number; amount: number }>();
+    alerts.forEach((alert) => {
+      const current = regions.get(alert.region) ?? { critical: 0, high: 0, amount: 0 };
+      if (alert.severity === "critical") current.critical += 1;
+      if (alert.severity === "high") current.high += 1;
+      if (alert.severity !== "medium") current.amount += Math.abs(Number(alert.current_amount_usd_m) || 0);
+      regions.set(alert.region, current);
+    });
+    return [...regions.entries()]
+      .map(([name, values]) => ({ name, ...values, total: values.critical + values.high }))
+      .filter((item) => item.total > 0)
+      .sort((a, b) => b.total - a.total || b.amount - a.amount)
+      .slice(0, 6);
+  }, [alerts]);
+
+  const agreementData = useMemo(() => {
+    const groups = new Map<string, number>();
+    alerts.forEach((alert) => {
+      const detectors = split(alert.detectors);
+      let group = "Other combination";
+      if (detectors.length === 1) {
+        if (detectors[0] === "rule") group = "Rule only";
+        else if (detectors[0] === "statistical_process_control") group = "Statistical only";
+        else if (detectors[0] === "isolation_forest") group = "ML only";
+      } else {
+        const hasRule = detectors.includes("rule");
+        const hasStat = detectors.includes("statistical_process_control");
+        const hasMl = detectors.includes("isolation_forest");
+        if (hasStat && hasMl && !hasRule) group = "Statistical + ML";
+        else if (hasRule) group = "Rule + another";
+      }
+      groups.set(group, (groups.get(group) ?? 0) + 1);
+    });
+    const order = ["Rule only", "Statistical only", "ML only", "Statistical + ML", "Rule + another", "Other combination"];
+    return order
+      .map((name) => ({ name, value: groups.get(name) ?? 0 }))
+      .filter((item) => item.value > 0);
+  }, [alerts]);
+
+  const maxTrend = Math.max(...trendData.map((item) => item.total), 1);
+  const maxRegion = Math.max(...regionalData.map((item) => item.total), 1);
+  const maxAgreement = Math.max(...agreementData.map((item) => item.value), 1);
 
   return (
     <main className="app-shell">
@@ -271,6 +328,130 @@ export default function Dashboard() {
                 </div>
                 <div className="progress"><i style={{ width: `${resolvedRate}%` }} /></div>
                 <small>{review?.needs_more_information ?? "—"} need more information</small>
+              </article>
+            </section>
+
+            <section className="visual-grid">
+              <article className="visual-card trend-card">
+                <div className="visual-heading">
+                  <div>
+                    <p className="eyebrow">Alert trend</p>
+                    <h2>Where exceptions concentrate over time</h2>
+                  </div>
+                  <div className="chart-legend">
+                    <span><i className="critical-key" /> Critical</span>
+                    <span><i className="high-key" /> High</span>
+                    <span><i className="medium-key" /> Medium</span>
+                  </div>
+                </div>
+                <div className="stacked-chart">
+                  {trendData.map((item) => (
+                    <div className="stack-column" key={item.name}>
+                      <div className="stack-value">{item.total}</div>
+                      <div className="stack-track">
+                        <div
+                          className="stack critical-stack"
+                          style={{ height: `${(item.critical / maxTrend) * 100}%` }}
+                          title={`${item.critical} critical`}
+                        />
+                        <div
+                          className="stack high-stack"
+                          style={{ height: `${(item.high / maxTrend) * 100}%` }}
+                          title={`${item.high} high`}
+                        />
+                        <div
+                          className="stack medium-stack"
+                          style={{ height: `${(item.medium / maxTrend) * 100}%` }}
+                          title={`${item.medium} medium`}
+                        />
+                      </div>
+                      <span>{item.name}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="chart-note">Annual observations only · alert count, not financial loss</p>
+              </article>
+
+              <article className="visual-card region-card">
+                <div className="visual-heading">
+                  <div>
+                    <p className="eyebrow">Geographic concentration</p>
+                    <h2>Priority alerts by region</h2>
+                  </div>
+                  <span className="chart-unit">Critical + high</span>
+                </div>
+                <div className="region-bars">
+                  {regionalData.map((item) => (
+                    <div className="region-row" key={item.name}>
+                      <span title={item.name}>{item.name}</span>
+                      <div className="region-track">
+                        <i className="critical-region" style={{ width: `${(item.critical / maxRegion) * 100}%` }} />
+                        <i className="high-region" style={{ width: `${(item.high / maxRegion) * 100}%` }} />
+                      </div>
+                      <strong>{item.total}</strong>
+                      <small>{formatMoney(String(item.amount))}</small>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="visual-card agreement-card">
+                <div className="visual-heading">
+                  <div>
+                    <p className="eyebrow">Detector agreement</p>
+                    <h2>How independent controls intersect</h2>
+                  </div>
+                  <strong className="highlight-number">{run?.corroborated_alerts ?? "—"} corroborated</strong>
+                </div>
+                <div className="agreement-bars">
+                  {agreementData.map((item) => (
+                    <div key={item.name} className={item.name.includes("+") ? "agreed" : ""}>
+                      <span>{item.name}</span>
+                      <div><i style={{ width: `${(item.value / maxAgreement) * 100}%` }} /></div>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
+                </div>
+                <p className="chart-note">Corroboration means at least two detector families flagged the same record.</p>
+              </article>
+
+              <article className="visual-card funnel-card">
+                <div className="visual-heading">
+                  <div>
+                    <p className="eyebrow">Review funnel</p>
+                    <h2>From detection to disposition</h2>
+                  </div>
+                  <span className="chart-unit">Current review cycle</span>
+                </div>
+                <div className="funnel">
+                  <div className="funnel-step">
+                    <strong>{run?.alerts ?? "—"}</strong>
+                    <span>Alerts generated</span>
+                  </div>
+                  <b>→</b>
+                  <div className="funnel-step sampled">
+                    <strong>{review?.sample_size ?? "—"}</strong>
+                    <span>Sampled for review</span>
+                  </div>
+                  <b>→</b>
+                  <div className="funnel-step resolved">
+                    <strong>{review?.resolved ?? "—"}</strong>
+                    <span>Cases resolved</span>
+                  </div>
+                </div>
+                <div className="funnel-outcomes">
+                  <div>
+                    <i className="legitimate-outcome" />
+                    <span>Legitimate exceptions</span>
+                    <strong>{review?.legitimate_exceptions ?? "—"}</strong>
+                  </div>
+                  <div>
+                    <i className="unresolved-outcome" />
+                    <span>Need more information</span>
+                    <strong>{review?.needs_more_information ?? "—"}</strong>
+                  </div>
+                </div>
+                <p className="chart-note">Precision rates remain suppressed until 10 cases are resolved.</p>
               </article>
             </section>
 

@@ -39,6 +39,18 @@ pipeline artifacts into an analyst investigation workflow.
 - review-evidence maturity and rate-suppression threshold; and
 - the principal segmentation and severity safeguards.
 
+### Portfolio visualizations
+
+1. An annual stacked alert trend by severity.
+2. Regional concentration of critical and high alerts, with associated current
+   financial amounts.
+3. Detector-family intersections separating standalone from corroborated
+   alerts.
+4. A review funnel from generated alerts to sampled and resolved cases.
+
+These views describe the alert and review populations. They do not represent
+financial losses, causal model explanations, or production accuracy.
+
 ## Phase 1 limitations
 
 - The interface reads synchronized artifact snapshots and does not write review
