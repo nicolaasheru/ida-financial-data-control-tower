@@ -87,3 +87,25 @@ test("evaluation artifact reports multi-seed robustness", async () => {
   assert.equal(Object.keys(evaluation.recall_by_seed).length, 5);
   assert.match(evaluation.method_note, /does not estimate production accuracy/i);
 });
+
+
+test("model-quality view exposes governance evidence and live configuration", async () => {
+  const source = await readFile(
+    new URL("../app/dashboard.tsx", import.meta.url),
+    "utf8",
+  );
+  const run = JSON.parse(
+    await readFile(
+      new URL("../public/data/run_summary.json", import.meta.url),
+      "utf8",
+    ),
+  );
+
+  assert.match(source, /Evaluation robustness/i);
+  assert.match(source, /Evidence readiness/i);
+  assert.match(source, /Human-review evidence/i);
+  assert.match(source, /Current model run/i);
+  assert.match(source, /Machine-learning output cannot receive critical severity/i);
+  assert.equal(run.model_run.algorithm, "IsolationForest");
+  assert.ok(run.model_run.features.length > 0);
+});

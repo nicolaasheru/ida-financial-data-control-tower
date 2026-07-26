@@ -87,7 +87,9 @@ artifacts and supports:
 - current-versus-prior financial comparisons;
 - detector evidence, corroboration, and recommended actions;
 - public-evidence review context; and
-- model, evaluation, and review-quality monitoring.
+- a model-governance view covering multi-seed control evaluation, human-review
+  evidence readiness, detector corroboration, the live Isolation Forest run
+  configuration and feature register, and direct assurance-document links.
 
 After running the Python pipeline, synchronize its latest outputs:
 

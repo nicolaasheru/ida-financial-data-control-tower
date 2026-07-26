@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+const PAGE_LOADED_AT = Date.now();
+
 type Alert = {
   row_id: string;
   record_key: string;
@@ -43,6 +45,15 @@ type RunSummary = {
   resolved_alerts: number;
   alerts_by_severity: Record<string, number>;
   alerts_by_detector: Record<string, number>;
+  model_run: {
+    algorithm: string;
+    segments: string;
+    features: string[];
+    n_estimators: number;
+    contamination: number;
+    random_state: number;
+    score_scope: string;
+  };
 };
 
 type EvaluationSummary = {
@@ -52,7 +63,15 @@ type EvaluationSummary = {
   trials: number;
   detected_trials: number;
   minimum_seed_recall: number;
+  seeds: number[];
+  recall_by_seed: Record<string, number>;
+  recall_by_scenario: Record<string, number>;
   recall_by_layer: Record<string, number>;
+  outcomes: Array<{
+    seed: number;
+    injection: string;
+    detected: boolean;
+  }>;
   method_note: string;
 };
 
@@ -60,9 +79,16 @@ type ReviewSummary = {
   sample_size: number;
   reviewed: number;
   resolved: number;
+  confirmed_data_issues: number;
   legitimate_exceptions: number;
+  false_positives: number;
   needs_more_information: number;
   minimum_resolved_for_rate: number;
+  actionable_precision: number | null;
+  false_positive_rate: number | null;
+  high_confidence_reviews: number;
+  medium_confidence_reviews: number;
+  low_confidence_reviews: number;
 };
 
 type ReviewRecord = {
@@ -387,16 +413,27 @@ export default function Dashboard() {
       legitimateExceptions: alerts.filter(
         (alert) => alert.review_outcome === "legitimate_exception",
       ).length,
+      confirmedDataIssues: alerts.filter(
+        (alert) => alert.review_outcome === "confirmed_data_issue",
+      ).length,
+      falsePositives: alerts.filter(
+        (alert) => alert.review_outcome === "false_positive",
+      ).length,
       needsMoreInformation: alerts.filter(
         (alert) => alert.review_outcome === "needs_more_information",
       ).length,
+      confidence: {
+        high: alerts.filter((alert) => alert.review_confidence === "high").length,
+        medium: alerts.filter((alert) => alert.review_confidence === "medium").length,
+        low: alerts.filter((alert) => alert.review_confidence === "low").length,
+      },
     };
   }, [alerts, review]);
   const resolvedRate = liveReviewSummary.sampleSize
     ? Math.round((liveReviewSummary.resolved / liveReviewSummary.sampleSize) * 100)
     : 0;
   const runAgeDays = run
-    ? (Date.now() - new Date(run.run_timestamp_utc).getTime()) / 86_400_000
+    ? (PAGE_LOADED_AT - new Date(run.run_timestamp_utc).getTime()) / 86_400_000
     : null;
   const pipelineState = dataLoadError
     ? { label: "Data unavailable", tone: "error" }
@@ -408,6 +445,27 @@ export default function Dashboard() {
   const totalSignals = run
     ? Object.values(run.alerts_by_detector).reduce((sum, current) => sum + current, 0)
     : 0;
+  const controlCoverage = useMemo(() => {
+    const mlOnly = alerts.filter(
+      (alert) =>
+        split(alert.detectors).length === 1 &&
+        split(alert.detectors)[0] === "isolation_forest",
+    ).length;
+    const ruleOnly = alerts.filter(
+      (alert) =>
+        split(alert.detectors).length === 1 &&
+        split(alert.detectors)[0] === "rule",
+    ).length;
+    const corroborated = alerts.filter(
+      (alert) => alert.corroborated === "True",
+    ).length;
+    return {
+      mlOnly,
+      ruleOnly,
+      corroborated,
+      corroborationRate: alerts.length ? corroborated / alerts.length : 0,
+    };
+  }, [alerts]);
   const trendData = useMemo(() => {
     const periods = new Map<string, { critical: number; high: number; medium: number }>();
     alerts
@@ -996,27 +1054,92 @@ export default function Dashboard() {
         ) : (
           <section className="quality-grid">
             <article className="quality-card hero-quality">
-              <p className="eyebrow">Controlled fault injection</p>
-              <h2>{evaluation?.fully_detected ?? "—"} of {evaluation?.injections ?? "—"} scenarios detected</h2>
-              <p className="evaluation-scope">
-                {evaluation
-                  ? `${evaluation.detected_trials} of ${evaluation.trials} seeded trials · ${Math.round(evaluation.minimum_seed_recall * 100)}% minimum run recall`
-                  : "Loading robustness evidence…"}
-              </p>
-              <p>{evaluation?.method_note}</p>
-              <div className="layer-list">
-                {evaluation && Object.entries(evaluation.recall_by_layer).map(([layer, recall]) => (
-                  <div key={layer}>
-                    <span>{label(layer)}</span>
-                    <div><i style={{ width: `${recall * 100}%` }} /></div>
-                    <strong>{Math.round(recall * 100)}%</strong>
+              <div className="quality-heading">
+                <div>
+                  <p className="eyebrow">Evaluation robustness</p>
+                  <h2>Controls tested beyond one hand-picked record</h2>
+                </div>
+                <span className="assurance-label">Control harness · not production accuracy</span>
+              </div>
+              <div className="quality-statline">
+                <div><strong>{evaluation?.injections ?? "—"}</strong><span>Failure modes</span></div>
+                <div><strong>{evaluation?.seed_runs ?? "—"}</strong><span>Target selections</span></div>
+                <div><strong>{evaluation?.detected_trials ?? "—"}/{evaluation?.trials ?? "—"}</strong><span>Trials detected</span></div>
+                <div><strong>{evaluation ? `${Math.round(evaluation.minimum_seed_recall * 100)}%` : "—"}</strong><span>Minimum run recall</span></div>
+              </div>
+              {evaluation && (
+                <div className="validation-matrix">
+                  <div className="matrix-header">
+                    <span>Failure mode</span>
+                    {evaluation.seeds.map((seed) => <b key={seed}>S{seed}</b>)}
+                    <b>Recall</b>
                   </div>
-                ))}
+                  {Object.entries(evaluation.recall_by_scenario).map(([scenario, recall]) => (
+                    <div className="matrix-row" key={scenario}>
+                      <span>{label(scenario)}</span>
+                      {evaluation.seeds.map((seed) => {
+                        const result = evaluation.outcomes.find(
+                          (outcome) => outcome.seed === seed && outcome.injection === scenario,
+                        );
+                        return (
+                          <i
+                            key={seed}
+                            className={result?.detected ? "passed" : "failed"}
+                            title={`Seed ${seed}: ${result?.detected ? "detected" : "not detected"}`}
+                          />
+                        );
+                      })}
+                      <strong>{Math.round(recall * 100)}%</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="quality-caveat">{evaluation?.method_note}</p>
+            </article>
+
+            <article className="quality-card evidence-readiness">
+              <p className="eyebrow">Evidence readiness</p>
+              <div className="readiness-title">
+                <h2>{liveReviewSummary.resolved} of {review?.minimum_resolved_for_rate ?? "—"}</h2>
+                <span className={liveReviewSummary.resolved >= (review?.minimum_resolved_for_rate ?? Infinity) ? "unlocked" : "locked"}>
+                  {liveReviewSummary.resolved >= (review?.minimum_resolved_for_rate ?? Infinity)
+                    ? "Rates available"
+                    : "Rates suppressed"}
+                </span>
+              </div>
+              <p>Final review outcomes required before precision and false-positive estimates are displayed.</p>
+              <div className="readiness-progress">
+                <i
+                  style={{
+                    width: `${Math.min(
+                      (liveReviewSummary.resolved / (review?.minimum_resolved_for_rate || 1)) * 100,
+                      100,
+                    )}%`,
+                  }}
+                />
+              </div>
+              <div className="confidence-summary">
+                <div className="confidence-bar">
+                  <i className="confidence-high" style={{ flex: liveReviewSummary.confidence.high }} />
+                  <i className="confidence-medium" style={{ flex: liveReviewSummary.confidence.medium }} />
+                  <i className="confidence-low" style={{ flex: liveReviewSummary.confidence.low }} />
+                </div>
+                <div className="confidence-legend">
+                  <span><i className="confidence-high" /> High <b>{liveReviewSummary.confidence.high}</b></span>
+                  <span><i className="confidence-medium" /> Medium <b>{liveReviewSummary.confidence.medium}</b></span>
+                  <span><i className="confidence-low" /> Low <b>{liveReviewSummary.confidence.low}</b></span>
+                </div>
               </div>
             </article>
-            <article className="quality-card">
-              <p className="eyebrow">Detector signal mix</p>
-              <h2>{totalSignals} signals</h2>
+
+            <article className="quality-card control-coverage">
+              <div className="quality-heading">
+                <div>
+                  <p className="eyebrow">Control coverage</p>
+                  <h2>{totalSignals} detector signals</h2>
+                </div>
+                <strong className="coverage-rate">{Math.round(controlCoverage.corroborationRate * 100)}% corroborated</strong>
+              </div>
               <div className="detector-bars">
                 {run && Object.entries(run.alerts_by_detector).map(([detector, count]) => (
                   <div key={detector}>
@@ -1026,28 +1149,69 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
-            </article>
-            <article className="quality-card">
-              <p className="eyebrow">Review evidence</p>
-              <h2>{alerts.length ? liveReviewSummary.resolved : "—"} cases resolved</h2>
-              <p>
-                Precision and false-positive rates remain suppressed until at least{" "}
-                {review?.minimum_resolved_for_rate ?? "—"} cases are resolved.
-              </p>
-              <div className="review-breakdown">
-                <span><i className="legitimate" /> {alerts.length ? liveReviewSummary.legitimateExceptions : "—"} legitimate exceptions</span>
-                <span><i className="unresolved" /> {alerts.length ? liveReviewSummary.needsMoreInformation : "—"} need more information</span>
+              <div className="coverage-metrics">
+                <div><strong>{controlCoverage.corroborated}</strong><span>Multiple control families</span></div>
+                <div><strong>{controlCoverage.mlOnly}</strong><span>ML-only alerts</span></div>
+                <div><strong>{controlCoverage.ruleOnly}</strong><span>Rule-only alerts</span></div>
               </div>
             </article>
-            <article className="quality-card">
-              <p className="eyebrow">Current model design</p>
-              <h2>Segmented, interpretable controls</h2>
-              <ul>
-                <li>Annual and quarterly observations modeled separately</li>
-                <li>Commitments and disbursements modeled separately</li>
-                <li>Country ML models separated from institutional aggregates</li>
-                <li>ML-only alerts cannot receive critical severity</li>
-              </ul>
+
+            <article className="quality-card review-evidence">
+              <p className="eyebrow">Human-review evidence</p>
+              <h2>What analysts concluded</h2>
+              <div className="outcome-list">
+                <div><span>Legitimate exceptions</span><strong>{liveReviewSummary.legitimateExceptions}</strong></div>
+                <div><span>Confirmed data issues</span><strong>{liveReviewSummary.confirmedDataIssues}</strong></div>
+                <div><span>False positives</span><strong>{liveReviewSummary.falsePositives}</strong></div>
+                <div><span>Need more information</span><strong>{liveReviewSummary.needsMoreInformation}</strong></div>
+              </div>
+              <div className="evidence-note">
+                <strong>Interpretation</strong>
+                <p>
+                  Unusual does not mean erroneous. Most sampled cases still require
+                  stronger evidence, so rates remain intentionally withheld.
+                </p>
+              </div>
+            </article>
+
+            <article className="quality-card model-run-card">
+              <div className="quality-heading">
+                <div>
+                  <p className="eyebrow">Current model run</p>
+                  <h2>{run?.model_run?.algorithm ?? "Model configuration unavailable"}</h2>
+                </div>
+                <span className="model-version">
+                  {run ? new Date(run.run_timestamp_utc).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                </span>
+              </div>
+              <div className="model-config-grid">
+                <div><span>Segments</span><strong>4</strong><small>Annual/quarterly × commitments/disbursements</small></div>
+                <div><span>Estimators</span><strong>{run?.model_run?.n_estimators ?? "—"}</strong><small>Independent trees per segment</small></div>
+                <div><span>Contamination</span><strong>{run?.model_run ? `${run.model_run.contamination * 100}%` : "—"}</strong><small>Starting assumption, pending calibration</small></div>
+                <div><span>Random state</span><strong>{run?.model_run?.random_state ?? "—"}</strong><small>Deterministic identical-input runs</small></div>
+                <div><span>Population</span><strong>Country</strong><small>Aggregates excluded from ML</small></div>
+                <div><span>Score scope</span><strong>Batch</strong><small>{run?.model_run?.score_scope ?? "—"}</small></div>
+              </div>
+              <div className="feature-register">
+                <span>Model features · {run?.model_run?.features.length ?? "—"}</span>
+                <div>
+                  {run?.model_run?.features.map((feature) => (
+                    <i key={feature}>{label(feature)}</i>
+                  ))}
+                </div>
+              </div>
+              <div className="policy-callout">
+                <strong>Decision policy</strong>
+                <span>Machine-learning output cannot receive critical severity without an independent control signal.</span>
+              </div>
+            </article>
+
+            <article className="quality-resources">
+              <span>Assurance documentation</span>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/model_card.md" target="_blank" rel="noreferrer">Model card ↗</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/data_dictionary.md" target="_blank" rel="noreferrer">Data dictionary ↗</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/ingestion_reliability.md" target="_blank" rel="noreferrer">Ingestion contract ↗</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/critical_alert_review.md" target="_blank" rel="noreferrer">Critical-alert review ↗</a>
             </article>
           </section>
         )}
