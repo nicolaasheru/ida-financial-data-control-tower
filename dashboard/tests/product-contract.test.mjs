@@ -72,3 +72,18 @@ test("run summary contains derived dataset coverage fields", async () => {
   assert.ok(summary.countries > 0);
   assert.ok(summary.run_timestamp_utc);
 });
+
+
+test("evaluation artifact reports multi-seed robustness", async () => {
+  const evaluation = JSON.parse(
+    await readFile(
+      new URL("../public/data/evaluation_summary.json", import.meta.url),
+      "utf8",
+    ),
+  );
+
+  assert.equal(evaluation.seed_runs, 5);
+  assert.equal(evaluation.trials, 25);
+  assert.equal(Object.keys(evaluation.recall_by_seed).length, 5);
+  assert.match(evaluation.method_note, /does not estimate production accuracy/i);
+});

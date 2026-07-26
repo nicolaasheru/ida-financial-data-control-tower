@@ -205,6 +205,11 @@ td span:not(.severity-pill):not(.corroborated):not(.review-state) { display: blo
 .quality-card { padding: 22px; min-height: 260px; }
 .quality-card h2 { margin-bottom: 12px; font-size: 24px; }
 .quality-card > p:not(.eyebrow) { color: var(--muted); font-size: 11px; line-height: 1.55; max-width: 680px; }
+.quality-card > .evaluation-scope {
+  color: #385a65;
+  font-size: 12px;
+  font-weight: 700;
+}
 .hero-quality { grid-column: 1 / -1; min-height: 300px; }
 .layer-list, .detector-bars { display: grid; gap: 13px; margin-top: 25px; }
 .layer-list > div, .detector-bars > div { display: grid; grid-template-columns: 190px 1fr 45px; gap: 12px; align-items: center; }

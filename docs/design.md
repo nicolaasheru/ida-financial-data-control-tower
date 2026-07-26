@@ -96,17 +96,19 @@ the evidence trail remains auditable.
 
 ## Evaluation plan
 
-Because the public source has no anomaly labels, evaluation will use:
+Because the public source has no anomaly labels, evaluation uses:
 
-1. controlled injection of missing values, duplicates, broken totals, and spikes;
+1. controlled injection of missing values, duplicates, broken totals, and
+   spikes across reproducible random target selections;
 2. detector recall by anomaly type;
 3. alert volume and false-positive review on untouched records;
 4. stability across time-based train/test windows;
 5. analyst-oriented explanations and reason codes.
 
-The current harness includes one internally reconciled spike specifically to
-exercise the statistical and ML layers. Recall is reported by detector layer so
-rule validation is not presented as general anomaly-model accuracy.
+The current harness runs five failure modes across five target-selection seeds,
+including one internally reconciled spike per seed specifically to exercise the
+statistical and ML layers. Recall is reported by seed, scenario, and detector
+layer so rule validation is not presented as general anomaly-model accuracy.
 
 ## Source-discovery decision
 

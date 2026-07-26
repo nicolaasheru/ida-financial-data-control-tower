@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from src.detect import MODEL_FEATURES, detect_isolation_forest
+from src.detect import MODEL_FEATURES, detect_isolation_forest, detect_statistical
 from src.features import engineer_features
 from src.pipeline import build_analyst_queue
 from src.review import merge_review_state
@@ -238,6 +238,41 @@ class FinancialControlTests(unittest.TestCase):
             first[columns].reset_index(drop=True),
             second[columns].reset_index(drop=True),
         )
+
+    def test_statistical_control_flags_material_country_shift(self):
+        features = pd.DataFrame(
+            [
+                {
+                    "row_id": 1,
+                    "record_key": "ida_shift",
+                    "entity_type": "country",
+                    "period_type": "annual",
+                    "category": "Commitments",
+                    "total": 220.0,
+                    "previous_year_total": 20.0,
+                    "year_over_year_change": 10.0,
+                }
+            ]
+        )
+        alerts = detect_statistical(features)
+        self.assertEqual(alerts.iloc[0]["reason_code"], "YEAR_OVER_YEAR_SHIFT")
+
+    def test_statistical_control_excludes_aggregate_shift(self):
+        features = pd.DataFrame(
+            [
+                {
+                    "row_id": 1,
+                    "record_key": "ida_aggregate_shift",
+                    "entity_type": "aggregate_or_institution",
+                    "period_type": "annual",
+                    "category": "Commitments",
+                    "total": 220.0,
+                    "previous_year_total": 20.0,
+                    "year_over_year_change": 10.0,
+                }
+            ]
+        )
+        self.assertTrue(detect_statistical(features).empty)
 
 
 if __name__ == "__main__":

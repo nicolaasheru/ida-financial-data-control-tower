@@ -1,7 +1,32 @@
 {
   "injections": 5,
   "fully_detected": 5,
+  "seed_runs": 5,
+  "seeds": [
+    11,
+    23,
+    42,
+    73,
+    101
+  ],
+  "trials": 25,
+  "detected_trials": 25,
   "control_recall": 1.0,
+  "minimum_seed_recall": 1.0,
+  "recall_by_seed": {
+    "11": 1.0,
+    "23": 1.0,
+    "42": 1.0,
+    "73": 1.0,
+    "101": 1.0
+  },
+  "recall_by_scenario": {
+    "missing_amount": 1.0,
+    "broken_reconciliation": 1.0,
+    "negative_component": 1.0,
+    "duplicate_grain": 1.0,
+    "reconciled_historical_spike": 1.0
+  },
   "recall_by_layer": {
     "structural_or_financial_rule": 1.0,
     "statistical": 1.0,
@@ -9,9 +34,10 @@
   },
   "outcomes": [
     {
+      "seed": 11,
       "injection": "missing_amount",
       "row_ids": [
-        2
+        585
       ],
       "expected_codes": [
         "INVALID_AMOUNT"
@@ -22,22 +48,25 @@
       "detected": true
     },
     {
+      "seed": 11,
       "injection": "broken_reconciliation",
       "row_ids": [
-        21
+        1829
       ],
       "expected_codes": [
         "TOTAL_MISMATCH"
       ],
       "observed_codes": [
-        "TOTAL_MISMATCH"
+        "TOTAL_MISMATCH",
+        "YEAR_OVER_YEAR_SHIFT"
       ],
       "detected": true
     },
     {
+      "seed": 11,
       "injection": "negative_component",
       "row_ids": [
-        23
+        576
       ],
       "expected_codes": [
         "NEGATIVE_AMOUNT",
@@ -50,24 +79,328 @@
       "detected": true
     },
     {
+      "seed": 11,
       "injection": "duplicate_grain",
       "row_ids": [
-        26,
+        2755,
         3420
       ],
       "expected_codes": [
         "DUPLICATE_GRAIN"
       ],
       "observed_codes": [
-        "DUPLICATE_GRAIN",
-        "NEGATIVE_AMOUNT"
+        "DUPLICATE_GRAIN"
       ],
       "detected": true
     },
     {
+      "seed": 11,
       "injection": "reconciled_historical_spike",
       "row_ids": [
-        2280
+        1547
+      ],
+      "expected_codes": [
+        "YEAR_OVER_YEAR_SHIFT",
+        "MULTIVARIATE_ANOMALY"
+      ],
+      "observed_codes": [
+        "MULTIVARIATE_ANOMALY",
+        "YEAR_OVER_YEAR_SHIFT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 23,
+      "injection": "missing_amount",
+      "row_ids": [
+        1589
+      ],
+      "expected_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "observed_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 23,
+      "injection": "broken_reconciliation",
+      "row_ids": [
+        2187
+      ],
+      "expected_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 23,
+      "injection": "negative_component",
+      "row_ids": [
+        225
+      ],
+      "expected_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 23,
+      "injection": "duplicate_grain",
+      "row_ids": [
+        2378,
+        3420
+      ],
+      "expected_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "observed_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 23,
+      "injection": "reconciled_historical_spike",
+      "row_ids": [
+        2080
+      ],
+      "expected_codes": [
+        "YEAR_OVER_YEAR_SHIFT",
+        "MULTIVARIATE_ANOMALY"
+      ],
+      "observed_codes": [
+        "MULTIVARIATE_ANOMALY",
+        "YEAR_OVER_YEAR_SHIFT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 42,
+      "injection": "missing_amount",
+      "row_ids": [
+        1642
+      ],
+      "expected_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "observed_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 42,
+      "injection": "broken_reconciliation",
+      "row_ids": [
+        460
+      ],
+      "expected_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "MULTIVARIATE_ANOMALY",
+        "TOTAL_MISMATCH",
+        "YEAR_OVER_YEAR_SHIFT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 42,
+      "injection": "negative_component",
+      "row_ids": [
+        2217
+      ],
+      "expected_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 42,
+      "injection": "duplicate_grain",
+      "row_ids": [
+        2622,
+        3420
+      ],
+      "expected_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "observed_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 42,
+      "injection": "reconciled_historical_spike",
+      "row_ids": [
+        892
+      ],
+      "expected_codes": [
+        "YEAR_OVER_YEAR_SHIFT",
+        "MULTIVARIATE_ANOMALY"
+      ],
+      "observed_codes": [
+        "MULTIVARIATE_ANOMALY",
+        "YEAR_OVER_YEAR_SHIFT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 73,
+      "injection": "missing_amount",
+      "row_ids": [
+        2644
+      ],
+      "expected_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "observed_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 73,
+      "injection": "broken_reconciliation",
+      "row_ids": [
+        1816
+      ],
+      "expected_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 73,
+      "injection": "negative_component",
+      "row_ids": [
+        1198
+      ],
+      "expected_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 73,
+      "injection": "duplicate_grain",
+      "row_ids": [
+        2810,
+        3420
+      ],
+      "expected_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "observed_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 73,
+      "injection": "reconciled_historical_spike",
+      "row_ids": [
+        3057
+      ],
+      "expected_codes": [
+        "YEAR_OVER_YEAR_SHIFT",
+        "MULTIVARIATE_ANOMALY"
+      ],
+      "observed_codes": [
+        "MULTIVARIATE_ANOMALY",
+        "YEAR_OVER_YEAR_SHIFT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 101,
+      "injection": "missing_amount",
+      "row_ids": [
+        3193
+      ],
+      "expected_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "observed_codes": [
+        "INVALID_AMOUNT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 101,
+      "injection": "broken_reconciliation",
+      "row_ids": [
+        1385
+      ],
+      "expected_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "TOTAL_MISMATCH"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 101,
+      "injection": "negative_component",
+      "row_ids": [
+        2384
+      ],
+      "expected_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH"
+      ],
+      "observed_codes": [
+        "NEGATIVE_AMOUNT",
+        "TOTAL_MISMATCH",
+        "YEAR_OVER_YEAR_SHIFT"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 101,
+      "injection": "duplicate_grain",
+      "row_ids": [
+        1208,
+        3420
+      ],
+      "expected_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "observed_codes": [
+        "DUPLICATE_GRAIN"
+      ],
+      "detected": true
+    },
+    {
+      "seed": 101,
+      "injection": "reconciled_historical_spike",
+      "row_ids": [
+        1058
       ],
       "expected_codes": [
         "YEAR_OVER_YEAR_SHIFT",
@@ -80,5 +413,5 @@
       "detected": true
     }
   ],
-  "method_note": "Controlled fault injection evaluates selected structural, financial, statistical, and ML-prioritization behaviors. It does not estimate production accuracy or false-positive rates."
+  "method_note": "Controlled fault injection evaluated 5 failure modes across 5 reproducible target selections. It verifies selected control behavior and target robustness; it does not estimate production accuracy or false-positive rates."
 }

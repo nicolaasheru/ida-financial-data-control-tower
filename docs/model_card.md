@@ -32,10 +32,12 @@ from multiple detector families combined with sufficient financial materiality.
 
 ## Evaluation
 
-Controlled fault injection checks selected failure modes and deterministic
-reproducibility. It does not estimate production accuracy. False-positive and
-actionable-rate estimates remain suppressed until at least ten sampled cases
-have final review outcomes.
+Controlled fault injection checks five selected failure modes across five
+reproducible target-selection seeds (25 trials) and reports recall by seed,
+scenario, and control layer. This tests robustness to injection placement but
+does not estimate production accuracy. False-positive and actionable-rate
+estimates remain suppressed until at least ten sampled cases have final review
+outcomes.
 
 ## Limitations
 

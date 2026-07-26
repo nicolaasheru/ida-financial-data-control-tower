@@ -69,6 +69,7 @@ Method references:
 - [`docs/data_dictionary.md`](docs/data_dictionary.md)
 - [`docs/critical_alert_review.md`](docs/critical_alert_review.md)
 - [`docs/design.md`](docs/design.md)
+- [`docs/ingestion_reliability.md`](docs/ingestion_reliability.md)
 
 Every logical financial record receives a deterministic `record_key` derived
 from organization, country, category, and time period. The positional `row_id`
@@ -140,11 +141,17 @@ python -m src.review --sync-sample --summarize
 
 ## Current validation
 
-The controlled fault-injection harness tests five scenarios: missing amount,
-broken reconciliation, negative component, duplicate grain, and an internally
-reconciled historical spike. The spike must exercise both the statistical and ML
-layers. Detection of these selected injections does not imply 100% real-world
-accuracy.
+The controlled fault-injection harness tests five scenarios across five
+reproducible random target selections: missing amount, broken reconciliation,
+negative component, duplicate grain, and an internally reconciled historical
+spike. The spike must exercise both the statistical and ML layers. Detection
+across these 25 seeded trials verifies selected control behavior and target
+robustness; it does not imply 100% real-world accuracy.
+
+Public-data ingestion retries transient network and server failures with bounded
+exponential backoff. It rejects malformed pages, changing record counts,
+incomplete pagination, and inconsistent cached snapshots. A refreshed snapshot
+is written atomically only after the declared record count is fully received.
 
 The manual-review workflow estimates false-positive behavior on untouched alerts.
 Rates remain suppressed until at least ten cases are resolved. The initial

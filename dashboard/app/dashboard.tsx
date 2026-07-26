@@ -48,6 +48,10 @@ type RunSummary = {
 type EvaluationSummary = {
   injections: number;
   fully_detected: number;
+  seed_runs: number;
+  trials: number;
+  detected_trials: number;
+  minimum_seed_recall: number;
   recall_by_layer: Record<string, number>;
   method_note: string;
 };
@@ -994,6 +998,11 @@ export default function Dashboard() {
             <article className="quality-card hero-quality">
               <p className="eyebrow">Controlled fault injection</p>
               <h2>{evaluation?.fully_detected ?? "—"} of {evaluation?.injections ?? "—"} scenarios detected</h2>
+              <p className="evaluation-scope">
+                {evaluation
+                  ? `${evaluation.detected_trials} of ${evaluation.trials} seeded trials · ${Math.round(evaluation.minimum_seed_recall * 100)}% minimum run recall`
+                  : "Loading robustness evidence…"}
+              </p>
               <p>{evaluation?.method_note}</p>
               <div className="layer-list">
                 {evaluation && Object.entries(evaluation.recall_by_layer).map(([layer, recall]) => (
