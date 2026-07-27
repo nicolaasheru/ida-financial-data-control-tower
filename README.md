@@ -10,6 +10,125 @@ statistical and machine-learning detectors, and produces analyst-ready alerts.
 How can a lightweight control layer detect missing, inconsistent, and unusual
 financial records before they propagate into downstream reporting?
 
+## Architecture and production pathway
+
+The repository contains a working local implementation and a separately defined
+Azure-oriented target architecture. The Azure services below describe a
+productionization pathway; they are **not presented as a completed deployment**.
+
+| Layer | Current implementation | Azure-oriented target |
+|---|---|---|
+| Ingestion and orchestration | Python pipeline | Azure Data Factory |
+| Data storage | Versioned local files and pipeline artifacts | Azure Data Lake Storage Gen2 |
+| Validation and anomaly detection | Python, statistical controls, and Isolation Forest | Azure Machine Learning batch jobs and model registry |
+| Alert and review evidence | CSV artifacts and SQLite | Azure Service Bus and Azure SQL Database |
+| Application services | Local FastAPI service and dashboard | FastAPI on Azure Container Apps and a hosted analyst dashboard |
+| Security and observability | Local configuration and logs | Microsoft Entra ID, Azure Key Vault, and Azure Monitor |
+
+### Executive architecture overview
+
+This recruiter-facing view communicates the core production flow and the
+human-in-the-loop control model at a glance.
+
+```mermaid
+flowchart LR
+    SRC["WBG Finances API"] --> ADF["Azure Data Factory"]
+    ADF --> LAKE["Data Lake Storage Gen2"]
+    LAKE --> AML["Azure Machine Learning"]
+    AML --> BUS["Azure Service Bus"]
+    BUS --> SQL["Azure SQL Database"]
+    SQL --> API["FastAPI on Container Apps"]
+    API --> UI["Analyst Dashboard"]
+```
+
+Cross-cutting controls:
+
+- **Microsoft Entra ID:** identity, authentication, and role-based access;
+- **Azure Key Vault:** secrets, certificates, and connection protection; and
+- **Azure Monitor:** pipeline, model, API, and application telemetry.
+
+[Open the polished, editable architecture overview in Figma](https://www.figma.com/design/7Go7iFTzqqyFQpol5XzL1g)
+
+### Detailed Azure reference architecture
+
+The detailed view preserves the engineering decisions behind the overview:
+immutable source evidence, separate raw and curated zones, controlled model
+promotion, reliable alert publication, persistent review evidence, and
+cross-cutting security and monitoring.
+
+```mermaid
+flowchart TB
+    SRC["WBG Finances API<br/>DS01557"] --> ADF["Azure Data Factory<br/>schedule · retry · orchestration"]
+
+    subgraph DATA["Governed data and model layer"]
+        RAW["ADLS Gen2 — raw<br/>immutable JSON and manifest"]
+        STD["ADLS Gen2 — standardized<br/>validated records"]
+        CUR["ADLS Gen2 — curated<br/>features · signals · alerts"]
+        QUA["Quarantine<br/>rejected pages and records"]
+        AML["Azure Machine Learning<br/>validation · features · scoring"]
+        REG["Azure ML registry<br/>model · environment · metrics"]
+    end
+
+    ADF --> RAW
+    RAW --> AML
+    AML --> STD
+    AML --> CUR
+    AML --> QUA
+    AML --> REG
+
+    CUR --> BUS["Azure Service Bus<br/>completed-run event"]
+    BUS --> API["FastAPI on Azure Container Apps<br/>review workflow"]
+    API --> SQL["Azure SQL Database<br/>alerts · reviews · audit events"]
+    API --> WEB["Analyst dashboard"]
+
+    ENTRA["Microsoft Entra ID<br/>users · roles · managed identities"] -.-> ADF
+    ENTRA -.-> AML
+    ENTRA -.-> API
+    KV["Azure Key Vault<br/>secrets · certificates"] -.-> ADF
+    KV -.-> AML
+    KV -.-> API
+    MON["Azure Monitor<br/>logs · metrics · alerts"] -.-> ADF
+    MON -.-> AML
+    MON -.-> API
+    MON -.-> SQL
+```
+
+[Open the editable detailed reference architecture in FigJam](https://www.figma.com/board/U9QiUIPkNCJhbqL4DYXfQ5)
+
+### End-to-end processing sequence
+
+```mermaid
+sequenceDiagram
+    participant T as ADF trigger
+    participant S as WBG API
+    participant L as ADLS Gen2
+    participant M as Azure ML
+    participant B as Service Bus
+    participant Q as Azure SQL
+    participant A as Analyst
+
+    T->>S: Request paginated records
+    S-->>T: Return pages and declared count
+    T->>L: Write temporary source snapshot
+    T->>T: Validate schema and completeness
+    alt Ingestion or control gate fails
+        T->>L: Preserve evidence in quarantine
+        T-->>T: Keep last known-good publication
+    else Gates pass
+        T->>L: Promote immutable raw snapshot
+        T->>M: Run validation, features, and scoring
+        M->>L: Write standardized and curated outputs
+        T->>B: Publish completed-run event
+        B->>Q: Upsert alerts by stable record key
+        A->>Q: Review through authenticated API
+        Q->>Q: Append immutable audit event
+    end
+```
+
+The local prototype remains independently runnable without Azure. Its Python
+pipeline, FastAPI service, SQLite review workflow, and analyst dashboard serve as
+the implemented reference for this target design.
+
 ## Official source
 
 - Dataset: IDA Commitments and Disbursements — Country / Economy Summary
@@ -91,6 +210,26 @@ npm run dev
 
 The dashboard is an investigation interface. It does not autonomously classify
 alerts as errors or replace review by an IDA financial-data specialist.
+
+## Persistent analyst review
+
+Phase 3 adds a FastAPI review service backed by SQLite for local development.
+It enforces review-state transitions, records append-only audit events, and uses
+optimistic version checks to prevent silent overwrites.
+
+Run the full local workflow:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cd dashboard && npm install && cd ..
+bash scripts/run-full-stack.sh
+```
+
+When the API is available, the investigation panel supports beginning, saving,
+resolving, and reopening reviews. When it is unavailable, the dashboard remains
+usable in read-only snapshot mode. See `docs/backend_review_workflow.md`.
 
 Create the manual-review sample with:
 
