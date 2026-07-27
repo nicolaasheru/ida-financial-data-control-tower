@@ -129,6 +129,11 @@ The local prototype remains independently runnable without Azure. Its Python
 pipeline, FastAPI service, SQLite review workflow, and analyst dashboard serve as
 the implemented reference for this target design.
 
+The deployable target-state package is available in [`infra/`](infra/README.md).
+The staged delivery, CI/CD, security, cost, evidence, and rollback plan is
+documented in
+[`docs/azure_productionization.md`](docs/azure_productionization.md).
+
 ## Official source
 
 - Dataset: IDA Commitments and Disbursements — Country / Economy Summary

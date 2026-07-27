@@ -1,0 +1,35 @@
+name: Validate Azure infrastructure
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/azure-infra-validate.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+
+permissions:
+  contents: read
+
+jobs:
+  bicep-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compile Bicep
+        uses: azure/CLI@v2
+        with:
+          inlineScript: |
+            az bicep install
+            az bicep build --file infra/main.bicep --stdout > /dev/null
+
+      - name: Check placeholder disclosures
+        shell: bash
+        run: |
+          grep -q "target-state" infra/README.md
+          grep -q "not been deployed" infra/README.md
