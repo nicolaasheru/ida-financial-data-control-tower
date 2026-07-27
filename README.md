@@ -156,6 +156,10 @@ claim access to internal World Bank systems.
 5. **Explainability:** every alert includes severity, reason codes, evidence,
    and a recommended analyst action.
 
+The complete assumptions, features, segmentation, scoring behavior, evaluation
+evidence, limitations, and responsible-use requirements are documented in the
+[`model card`](docs/model_card.md).
+
 ## Financial calibration
 
 - Annual and quarterly observations are modeled separately.
