@@ -160,6 +160,10 @@ The complete assumptions, features, segmentation, scoring behavior, evaluation
 evidence, limitations, and responsible-use requirements are documented in the
 [`model card`](docs/model_card.md).
 
+Snapshot-level ingestion, completeness, uniqueness, reconciliation, feature
+availability, alert-composition, and remediation evidence is documented in the
+[`data-quality report`](docs/data_quality_report.md).
+
 ## Financial calibration
 
 - Annual and quarterly observations are modeled separately.
