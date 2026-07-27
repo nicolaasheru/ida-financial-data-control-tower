@@ -63,23 +63,6 @@ Key outputs:
 - `artifacts/review_summary.json`: review coverage and caveated rate estimates.
 - `artifacts/run_summary.json`: run-level volumes and severity distribution.
 
-Method references:
-
-- [`docs/model_card.md`](docs/model_card.md)
-- [`docs/data_dictionary.md`](docs/data_dictionary.md)
-- [`docs/critical_alert_review.md`](docs/critical_alert_review.md)
-- [`docs/design.md`](docs/design.md)
-- [`docs/ingestion_reliability.md`](docs/ingestion_reliability.md)
-- [`docs/azure_target_architecture.md`](docs/azure_target_architecture.md)
-- [`docs/productionization_plan.md`](docs/productionization_plan.md)
-- [`docs/operations_runbook.md`](docs/operations_runbook.md)
-
-Every logical financial record receives a deterministic `record_key` derived
-from organization, country, category, and time period. The positional `row_id`
-is retained only as a readable source-row reference; review decisions and audit
-history use `record_key`, so reordering or appending source records cannot
-silently move a decision to another financial grain.
-
 ## Analyst dashboard
 
 Phase 1 adds a functional dashboard in `dashboard/`. It reads the actual pipeline
@@ -90,9 +73,7 @@ artifacts and supports:
 - current-versus-prior financial comparisons;
 - detector evidence, corroboration, and recommended actions;
 - public-evidence review context; and
-- a model-governance view covering multi-seed control evaluation, human-review
-  evidence readiness, detector corroboration, the live Isolation Forest run
-  configuration and feature register, and direct assurance-document links.
+- model, evaluation, and review-quality monitoring.
 
 After running the Python pipeline, synchronize its latest outputs:
 
@@ -111,49 +92,6 @@ npm run dev
 The dashboard is an investigation interface. It does not autonomously classify
 alerts as errors or replace review by an IDA financial-data specialist.
 
-## Azure-oriented target architecture
-
-The working implementation remains local. A documented Azure target maps the
-same pipeline and review controls to Azure Data Factory, Data Lake Storage Gen2,
-Azure Machine Learning, Azure SQL, Container Apps, Static Web Apps, Entra ID,
-Key Vault, Service Bus, and Azure Monitor.
-
-The design prioritizes immutable source lineage, atomic publication,
-identity-based access, model/version governance, human review, observability,
-and independent rollback of application, data, and model assets. Azure
-Databricks is retained as a scale-up option rather than introduced for the
-current 3,420-record workload.
-
-Architecture and handoff:
-
-- [`docs/azure_target_architecture.md`](docs/azure_target_architecture.md)
-- [`docs/productionization_plan.md`](docs/productionization_plan.md)
-- [`docs/operations_runbook.md`](docs/operations_runbook.md)
-- [`infra/azure/README.md`](infra/azure/README.md)
-
-These documents are an implementation-ready target design. They do not claim
-that the prototype is deployed on Azure.
-
-## Persistent analyst review
-
-Phase 3 adds a FastAPI review service backed by SQLite for local development.
-It enforces review-state transitions, records append-only audit events, and uses
-optimistic version checks to prevent silent overwrites.
-
-Run the full local workflow:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cd dashboard && npm install && cd ..
-bash scripts/run-full-stack.sh
-```
-
-When the API is available, the investigation panel supports beginning, saving,
-resolving, and reopening reviews. When it is unavailable, the dashboard remains
-usable in read-only snapshot mode. See `docs/backend_review_workflow.md`.
-
 Create the manual-review sample with:
 
 ```bash
@@ -169,17 +107,11 @@ python -m src.review --sync-sample --summarize
 
 ## Current validation
 
-The controlled fault-injection harness tests five scenarios across five
-reproducible random target selections: missing amount, broken reconciliation,
-negative component, duplicate grain, and an internally reconciled historical
-spike. The spike must exercise both the statistical and ML layers. Detection
-across these 25 seeded trials verifies selected control behavior and target
-robustness; it does not imply 100% real-world accuracy.
-
-Public-data ingestion retries transient network and server failures with bounded
-exponential backoff. It rejects malformed pages, changing record counts,
-incomplete pagination, and inconsistent cached snapshots. A refreshed snapshot
-is written atomically only after the declared record count is fully received.
+The controlled fault-injection harness tests five scenarios: missing amount,
+broken reconciliation, negative component, duplicate grain, and an internally
+reconciled historical spike. The spike must exercise both the statistical and ML
+layers. Detection of these selected injections does not imply 100% real-world
+accuracy.
 
 The manual-review workflow estimates false-positive behavior on untouched alerts.
 Rates remain suppressed until at least ten cases are resolved. The initial
@@ -191,17 +123,3 @@ substitute for validation by an IDA financial-data specialist.
 This is an independent portfolio prototype using publicly available World Bank
 data. It is not an official World Bank Group system and does not use internal WBG
 infrastructure or non-public financial records.
-
-## Known limitations
-
-- The review API is a local, unauthenticated demonstration. Reviewer names are
-  free text; production identity would come from Microsoft Entra ID claims.
-- Isolation Forest is refit in deterministic batch mode. Scores are normalized
-  relative to each run's segment and should not be compared across runs without
-  model and dataset version context.
-- The 2% contamination value is a documented starting assumption pending
-  calibration with a larger expert-reviewed sample.
-- Controlled fault injection is a deterministic control-harness check, not an
-  estimate of production accuracy.
-- Public data cannot reproduce internal IDA replenishment, forecasting,
-  approval, or downstream-reporting workflows.
