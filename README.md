@@ -70,6 +70,9 @@ Method references:
 - [`docs/critical_alert_review.md`](docs/critical_alert_review.md)
 - [`docs/design.md`](docs/design.md)
 - [`docs/ingestion_reliability.md`](docs/ingestion_reliability.md)
+- [`docs/azure_target_architecture.md`](docs/azure_target_architecture.md)
+- [`docs/productionization_plan.md`](docs/productionization_plan.md)
+- [`docs/operations_runbook.md`](docs/operations_runbook.md)
 
 Every logical financial record receives a deterministic `record_key` derived
 from organization, country, category, and time period. The positional `row_id`
@@ -107,6 +110,29 @@ npm run dev
 
 The dashboard is an investigation interface. It does not autonomously classify
 alerts as errors or replace review by an IDA financial-data specialist.
+
+## Azure-oriented target architecture
+
+The working implementation remains local. A documented Azure target maps the
+same pipeline and review controls to Azure Data Factory, Data Lake Storage Gen2,
+Azure Machine Learning, Azure SQL, Container Apps, Static Web Apps, Entra ID,
+Key Vault, Service Bus, and Azure Monitor.
+
+The design prioritizes immutable source lineage, atomic publication,
+identity-based access, model/version governance, human review, observability,
+and independent rollback of application, data, and model assets. Azure
+Databricks is retained as a scale-up option rather than introduced for the
+current 3,420-record workload.
+
+Architecture and handoff:
+
+- [`docs/azure_target_architecture.md`](docs/azure_target_architecture.md)
+- [`docs/productionization_plan.md`](docs/productionization_plan.md)
+- [`docs/operations_runbook.md`](docs/operations_runbook.md)
+- [`infra/azure/README.md`](infra/azure/README.md)
+
+These documents are an implementation-ready target design. They do not claim
+that the prototype is deployed on Azure.
 
 ## Persistent analyst review
 

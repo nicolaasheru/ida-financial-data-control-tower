@@ -106,6 +106,7 @@ test("model-quality view exposes governance evidence and live configuration", as
   assert.match(source, /Human-review evidence/i);
   assert.match(source, /Current model run/i);
   assert.match(source, /Machine-learning output cannot receive critical severity/i);
+  assert.match(source, /Azure target architecture/i);
   assert.equal(run.model_run.algorithm, "IsolationForest");
   assert.ok(run.model_run.features.length > 0);
 });

@@ -1212,6 +1212,7 @@ export default function Dashboard() {
               <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/data_dictionary.md" target="_blank" rel="noreferrer">Data dictionary ↗</a>
               <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/ingestion_reliability.md" target="_blank" rel="noreferrer">Ingestion contract ↗</a>
               <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/critical_alert_review.md" target="_blank" rel="noreferrer">Critical-alert review ↗</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/azure_target_architecture.md" target="_blank" rel="noreferrer">Azure target architecture ↗</a>
             </article>
           </section>
         )}
