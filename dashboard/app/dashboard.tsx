@@ -29,6 +29,7 @@ type Alert = {
   recommended_actions: string;
   review_status: string;
   review_outcome: string;
+  reviewer: string;
   review_confidence: string;
   review_notes: string;
   evidence_url: string;
