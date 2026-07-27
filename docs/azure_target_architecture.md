@@ -125,7 +125,7 @@ sequenceDiagram
             A->>Q: Review through authenticated API
             Q->>Q: Append immutable audit event
         else gates fail
-            T-->>T: Mark run failed; do not publish
+            T-->>T: Mark run failed and do not publish
         end
     end
 ```
