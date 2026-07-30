@@ -19,6 +19,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DATABASE_PATH = Path(
     os.getenv("REVIEW_DATABASE_PATH", ROOT / "data" / "reviews.sqlite3")
 )
+CORS_ALLOWED_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 
 class ReviewUpdate(BaseModel):
@@ -46,7 +51,7 @@ def create_app(
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[],
+        allow_origins=CORS_ALLOWED_ORIGINS,
         allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
         allow_credentials=False,
         allow_methods=["GET", "PUT"],
