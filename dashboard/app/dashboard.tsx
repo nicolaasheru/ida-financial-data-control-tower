@@ -837,8 +837,8 @@ export default function Dashboard() {
                             <span>vs. {formatMoney(alert.comparison_amount_usd_m)}</span>
                           </td>
                           <td>
-                            <span className="reason">{split(alert.reason_codes)[0]?.replaceAll("_", " ")}</span>
-                            {alert.corroborated === "True" && <span className="corroborated">2+ controls</span>}
+                            <span className="reason">{label(split(alert.reason_codes)[0] ?? "")}</span>
+                            {alert.corroborated === "True" && <span className="corroborated">Corroborated</span>}
                           </td>
                           <td><span className={`review-state ${alert.review_status}`}>{label(alert.review_status)}</span></td>
                         </tr>
