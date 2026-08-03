@@ -569,11 +569,6 @@ export default function Dashboard() {
                 ? "Financial data review"
                 : "Model performance and control evidence"}
             </h1>
-            <p className="mission-line">
-              {panel === "alerts"
-                ? "Review unusual commitment and disbursement records, document supporting evidence, and record an auditable decision."
-                : "Inspect detector coverage, evaluation results, model configuration, and completed analyst reviews."}
-            </p>
           </div>
           <div className={`run-status ${pipelineState.tone}`}>
             <i />

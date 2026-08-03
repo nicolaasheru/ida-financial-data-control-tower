@@ -2249,3 +2249,75 @@ th:nth-child(4) { text-align: right; }
   .model-specification > div { grid-template-columns: 1fr; gap: 5px; }
   .decision-note { grid-template-columns: 1fr; }
 }
+
+/* Contained Earth-data masthead. This final rule deliberately replaces all
+   earlier experimental hero layers so no decorative geometry can leak out. */
+.workspace {
+  overflow: hidden;
+  background: #f4f7f9;
+}
+
+.workspace::before,
+.topbar::before,
+.topbar::after {
+  display: none !important;
+  content: none !important;
+}
+
+.topbar {
+  isolation: isolate;
+  width: auto;
+  max-width: none;
+  min-height: 178px;
+  margin: 0 -34px 28px;
+  padding: 34px max(34px, calc((100vw - 1480px) / 2 + 34px));
+  overflow: hidden;
+  border: 0;
+  border-bottom: 3px solid #36a3c9;
+  background:
+    linear-gradient(90deg, rgba(2, 24, 43, .99) 0%, rgba(2, 24, 43, .95) 37%, rgba(2, 24, 43, .56) 73%, rgba(2, 24, 43, .25) 100%),
+    linear-gradient(0deg, rgba(0, 22, 39, .58), transparent 60%),
+    url("/ida-global-atmosphere.png") right 43% / cover no-repeat;
+  color: #ffffff;
+}
+
+.topbar .eyebrow {
+  margin: 0 0 11px;
+  color: #92c9e5;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .12em;
+}
+
+.topbar h1 {
+  max-width: 760px;
+  margin: 0;
+  color: #ffffff !important;
+  font-size: clamp(31px, 3vw, 44px) !important;
+  font-weight: 560 !important;
+  line-height: 1.04;
+  letter-spacing: -.035em;
+}
+
+.mission-line { display: none !important; }
+
+.run-status {
+  max-width: 270px;
+  border: 1px solid rgba(164, 207, 229, .48);
+  border-radius: 2px;
+  background: rgba(2, 27, 47, .7);
+  color: #ffffff;
+  backdrop-filter: blur(8px);
+}
+
+.run-status span { color: #b4ccda; }
+
+@media (max-width: 680px) {
+  .topbar {
+    min-height: 190px;
+    margin-inline: -12px;
+    padding: 30px 20px;
+    background-position: 61% center;
+  }
+  .run-status { max-width: 100%; }
+}
