@@ -195,6 +195,7 @@ export default function Dashboard() {
   const [period, setPeriod] = useState("all");
   const [reviewStatus, setReviewStatus] = useState("all");
   const [selectedId, setSelectedId] = useState("");
+  const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [sort, setSort] = useState<"priority" | "materiality" | "amount">("priority");
   const [panel, setPanel] = useState<"alerts" | "quality">("alerts");
   const [liveReview, setLiveReview] = useState<ReviewRecord | null>(null);
@@ -281,6 +282,14 @@ export default function Dashboard() {
 
   const selected =
     alerts.find((alert) => alert.record_key === selectedId) ?? filtered[0];
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRecordModalOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, []);
 
   useEffect(() => {
     if (!selected) return;
@@ -527,38 +536,29 @@ export default function Dashboard() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">IDA</div>
-          <div>
-            <strong>Control Tower</strong>
-            <span>Financial data assurance</span>
+      <header className="institutional-header">
+        <div className="brand-bar">
+          <button className="institution-brand" onClick={() => setPanel("alerts")} aria-label="Open alert operations">
+            <span className="institution-mark" aria-hidden="true"><i /><i /><i /></span>
+            <span className="institution-title">
+              <strong>IDA Financial Data Control Tower</strong>
+              <small>Financial integrity and analyst assurance</small>
+            </span>
+          </button>
+          <div className="prototype-identity">
+            <span>Independent prototype</span>
+            <a href="https://financesone.worldbank.org/ida-commitments-and-disbursements-country-economy-summary/DS01557" target="_blank" rel="noreferrer">Public data source</a>
           </div>
         </div>
-        <nav>
-          <button className={panel === "alerts" ? "active" : ""} onClick={() => setPanel("alerts")}>
-            <span>⌁</span> Alert operations
-            <b>{alerts.length ? liveReviewSummary.open : "—"}</b>
-          </button>
-          <button className={panel === "quality" ? "active" : ""} onClick={() => setPanel("quality")}>
-            <span>◫</span> Model & data quality
-          </button>
+        <nav className="primary-navigation" aria-label="Primary navigation">
+          <div>
+            <button className={panel === "alerts" ? "active" : ""} onClick={() => setPanel("alerts")}>Alert operations <b>{alerts.length ? liveReviewSummary.open : "—"}</b></button>
+            <button className={panel === "quality" ? "active" : ""} onClick={() => setPanel("quality")}>Model &amp; data quality</button>
+          </div>
+          <span>IDA commitments and disbursements · DS01557</span>
         </nav>
-        <div className="sidebar-section">
-          <p>Data source</p>
-          <strong>IDA Commitments & Disbursements</strong>
-          <span>DS01557 · USD millions</span>
-        </div>
-        <div className="sidebar-section methodology">
-          <p>Control layers</p>
-          <span><i className="rule-dot" /> Financial rules</span>
-          <span><i className="stat-dot" /> Statistical process control</span>
-          <span><i className="ml-dot" /> Isolation Forest</span>
-        </div>
-        <div className="disclaimer">
-          Independent prototype using public WBG data. Not an official World Bank system.
-        </div>
-      </aside>
+        <div className="independence-notice"><strong>Independent project</strong> This prototype is not affiliated with, endorsed by, or operated by the World Bank Group.</div>
+      </header>
 
       <section className="workspace">
         <header className="topbar">
@@ -811,7 +811,18 @@ export default function Dashboard() {
                         <tr
                           key={alert.record_key}
                           className={selected?.record_key === alert.record_key ? "selected" : ""}
-                          onClick={() => setSelectedId(alert.record_key)}
+                          tabIndex={0}
+                          onClick={() => {
+                            setSelectedId(alert.record_key);
+                            setRecordModalOpen(true);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setSelectedId(alert.record_key);
+                              setRecordModalOpen(true);
+                            }
+                          }}
                         >
                           <td><span className={`severity-pill ${alert.severity}`}>{alert.severity}</span></td>
                           <td>
@@ -840,8 +851,11 @@ export default function Dashboard() {
               {selected && (
                 <aside className="detail-panel">
                   <div className="detail-top">
-                    <span className={`severity-pill ${selected.severity}`}>{selected.severity}</span>
-                    <button aria-label="Close selection" onClick={() => setSelectedId("")}>×</button>
+                    <div>
+                      <p className="eyebrow">Analyst workspace</p>
+                      <span className={`severity-pill ${selected.severity}`}>{selected.severity}</span>
+                    </div>
+                    <button className="open-record-button" onClick={() => setRecordModalOpen(true)}>View full record</button>
                   </div>
                   <p className="eyebrow">Alert #{selected.row_id}</p>
                   <h2>{selected.country}</h2>
@@ -906,7 +920,7 @@ export default function Dashboard() {
                     <p className="recommended">{split(selected.recommended_actions)[0]}</p>
                   </section>
 
-                  <section className="review-card">
+                  <section className="review-card review-workbench">
                     <div className="section-title">
                       <h3>Analyst review</h3>
                       <div className="review-card-status">
@@ -1051,6 +1065,70 @@ export default function Dashboard() {
                 </aside>
               )}
             </section>
+            {selected && recordModalOpen && (
+              <div className="record-modal-backdrop" onMouseDown={() => setRecordModalOpen(false)}>
+                <section
+                  className="record-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="record-modal-title"
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <header className="record-modal-header">
+                    <div>
+                      <span className={`severity-pill ${selected.severity}`}>{selected.severity}</span>
+                      <p>Alert #{selected.row_id}</p>
+                    </div>
+                    <button aria-label="Close record details" onClick={() => setRecordModalOpen(false)}>×</button>
+                  </header>
+                  <div className="record-modal-body">
+                    <div className="record-modal-title">
+                      <p>{selected.region} · {selected.time_period} · {selected.category}</p>
+                      <h2 id="record-modal-title">{selected.country}</h2>
+                    </div>
+                    <div className="modal-amount-comparison">
+                      <div><span>Current amount</span><strong>{formatMoney(selected.current_amount_usd_m)}</strong></div>
+                      <i aria-hidden="true">compared with</i>
+                      <div><span>Comparable prior</span><strong>{formatMoney(selected.comparison_amount_usd_m)}</strong></div>
+                      <b className={Number(selected.change_percent) >= 0 ? "up" : "down"}>{formatPercent(selected.change_percent)}</b>
+                    </div>
+                    <div className="modal-detail-grid">
+                      <section>
+                        <h3>Why this record was flagged</h3>
+                        <div className="reason-list">
+                          {split(selected.reason_codes).map((reason, index) => (
+                            <article key={reason}>
+                              <i>{String(index + 1).padStart(2, "0")}</i>
+                              <div><strong>{label(reason)}</strong><span>{split(selected.messages)[index] ?? selected.messages}</span></div>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                      <section>
+                        <div className="section-title">
+                          <h3>Control evidence</h3>
+                          {selected.corroborated === "True" && <span className="corroborated">Corroborated</span>}
+                        </div>
+                        <div className="evidence-box">{split(selected.evidence).map((item) => <p key={item}>{item}</p>)}</div>
+                        <div className="mini-metrics">
+                          <div><span>ML score</span><strong>{selected.anomaly_score ? Number(selected.anomaly_score).toFixed(2) : "N/A"}</strong></div>
+                          <div><span>Materiality</span><strong>{Math.round(Number(selected.materiality_percentile) * 100)}th pct.</strong></div>
+                          <div><span>Detectors</span><strong>{selected.detector_count}</strong></div>
+                        </div>
+                      </section>
+                    </div>
+                    <section className="modal-recommendation">
+                      <span>Recommended action</span>
+                      <p>{split(selected.recommended_actions)[0]}</p>
+                    </section>
+                  </div>
+                  <footer className="record-modal-actions">
+                    <span>The analyst form remains open beside the alert queue.</span>
+                    <button onClick={() => setRecordModalOpen(false)}>Continue review</button>
+                  </footer>
+                </section>
+              </div>
+            )}
           </>
         ) : (
           <section className="quality-grid">
@@ -1217,27 +1295,21 @@ export default function Dashboard() {
             </article>
           </section>
         )}
-        <footer className="creator-footer">
-          <div className="creator-signature">
-            <span className="creator-mark">N/D</span>
-            <div>
-              <strong>Designed & engineered by Nicolaas</strong>
-              <span>Independent financial data engineering prototype</span>
+        <footer className="institutional-footer">
+          <div className="footer-main">
+            <div className="footer-intro">
+              <strong>IDA Financial Data Control Tower</strong>
+              <p>An independent financial-data engineering prototype for explainable detection, evidence review, and auditable analyst decisions.</p>
+              <span>Designed and engineered by Nicolaas Heru Dreandachrista.</span>
             </div>
+            <div><strong>Explore</strong><button onClick={() => setPanel("alerts")}>Alert operations</button><button onClick={() => setPanel("quality")}>Model &amp; data quality</button></div>
+            <div><strong>Evidence</strong><a href="https://financesone.worldbank.org/ida-commitments-and-disbursements-country-economy-summary/DS01557" target="_blank" rel="noreferrer">Public dataset</a><a href="https://github.com/nicolaasheru/ida-financial-data-control-tower" target="_blank" rel="noreferrer">Source code</a></div>
+            <div><strong>Creator</strong><a href="https://nicolaasheru.com" target="_blank" rel="noreferrer">Portfolio</a><a href="https://linkedin.com/in/nicolaasheru" target="_blank" rel="noreferrer">LinkedIn</a><a href="mailto:nicolaasherud@gmail.com">Contact</a></div>
           </div>
-          <div className="creator-links">
-            <a
-              href="https://linkedin.com/in/nicolaasheru"
-              target="_blank"
-              rel="noreferrer"
-            >
-              LinkedIn ↗
-            </a>
-            <a href="mailto:nicolaasherud@gmail.com">
-              nicolaasherud@gmail.com
-            </a>
+          <div className="footer-legal">
+            <span>© 2026 Nicolaas Heru Dreandachrista</span>
+            <p><strong>Independent project disclaimer:</strong> This prototype uses public World Bank Group data but is not affiliated with, endorsed by, commissioned by, or operated by the World Bank Group.</p>
           </div>
-          <span className="creator-watermark" aria-hidden="true">NICOLAAS</span>
         </footer>
       </section>
     </main>
