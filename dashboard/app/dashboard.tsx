@@ -591,42 +591,32 @@ export default function Dashboard() {
         {panel === "alerts" ? (
           <>
             <section className="metrics">
-              <article className="metric primary">
-                <span>Records monitored</span>
+              <div className="summary-lead">
+                <span>Portfolio coverage</span>
                 <strong>{run ? number.format(run.source_records) : "—"}</strong>
                 <small>
                   {run
                     ? `${number.format(run.periods)} reporting periods · ${number.format(run.countries)} entities`
                     : "Dataset coverage unavailable"}
                 </small>
-              </article>
-              <article className="metric">
-                <span>Open alerts</span>
-                <strong>{alerts.length ? liveReviewSummary.open : "—"}</strong>
-                <div className="severity-strip">
-                  <i className="critical" style={{ flex: liveReviewSummary.openBySeverity.critical }} />
-                  <i className="high" style={{ flex: liveReviewSummary.openBySeverity.high }} />
-                  <i className="medium" style={{ flex: liveReviewSummary.openBySeverity.medium }} />
+              </div>
+              <dl className="summary-register">
+                <div>
+                  <dt>Open alerts</dt>
+                  <dd>{alerts.length ? liveReviewSummary.open : "—"}</dd>
+                  <small><b className="critical-text">{alerts.length ? liveReviewSummary.openBySeverity.critical : "—"} critical</b> · {alerts.length ? liveReviewSummary.openBySeverity.high : "—"} high</small>
                 </div>
-                <small>
-                  <b className="critical-text">{alerts.length ? liveReviewSummary.openBySeverity.critical : "—"} critical</b>
-                  {" · "}{alerts.length ? liveReviewSummary.openBySeverity.high : "—"} high
-                </small>
-              </article>
-              <article className="metric">
-                <span>Corroborated</span>
-                <strong>{run?.corroborated_alerts ?? "—"}</strong>
-                <small>Flagged by 2+ detector families</small>
-              </article>
-              <article className="metric">
-                <span>Review progress</span>
-                <div className="progress-value">
-                  <strong>{alerts.length ? liveReviewSummary.resolved : "—"}</strong>
-                  <em>of {alerts.length ? liveReviewSummary.sampleSize : "—"} reviewed sample</em>
+                <div>
+                  <dt>Independent corroboration</dt>
+                  <dd>{run?.corroborated_alerts ?? "—"}</dd>
+                  <small>Records flagged by multiple detector families</small>
                 </div>
-                <div className="progress"><i style={{ width: `${resolvedRate}%` }} /></div>
-                <small>{alerts.length ? liveReviewSummary.needsMoreInformation : "—"} need more information</small>
-              </article>
+                <div>
+                  <dt>Completed reviews</dt>
+                  <dd>{alerts.length ? liveReviewSummary.resolved : "—"}<em> / {alerts.length ? liveReviewSummary.sampleSize : "—"}</em></dd>
+                  <small>{alerts.length ? liveReviewSummary.needsMoreInformation : "—"} cases still need evidence</small>
+                </div>
+              </dl>
             </section>
 
             <section className="visual-grid">
@@ -1263,26 +1253,23 @@ export default function Dashboard() {
                   {run ? new Date(run.run_timestamp_utc).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                 </span>
               </div>
-              <div className="model-config-grid">
-                <div><span>Segments</span><strong>4</strong><small>Annual/quarterly × commitments/disbursements</small></div>
-                <div><span>Estimators</span><strong>{run?.model_run?.n_estimators ?? "—"}</strong><small>Independent trees per segment</small></div>
-                <div><span>Contamination</span><strong>{run?.model_run ? `${run.model_run.contamination * 100}%` : "—"}</strong><small>Starting assumption, pending calibration</small></div>
-                <div><span>Random state</span><strong>{run?.model_run?.random_state ?? "—"}</strong><small>Deterministic identical-input runs</small></div>
-                <div><span>Population</span><strong>Country</strong><small>Aggregates excluded from ML</small></div>
-                <div><span>Score scope</span><strong>Batch</strong><small>{run?.model_run?.score_scope ?? "—"}</small></div>
+              <div className="model-documentation">
+                <dl className="model-specification">
+                  <div><dt>Segmentation</dt><dd>4 segments</dd><span>Annual and quarterly records, separated by commitments and disbursements.</span></div>
+                  <div><dt>Estimator configuration</dt><dd>{run?.model_run?.n_estimators ?? "—"} trees</dd><span>Independent ensemble fitted within each segment.</span></div>
+                  <div><dt>Contamination assumption</dt><dd>{run?.model_run ? `${run.model_run.contamination * 100}%` : "—"}</dd><span>Initial operating threshold, pending calibration with completed reviews.</span></div>
+                  <div><dt>Reproducibility</dt><dd>Seed {run?.model_run?.random_state ?? "—"}</dd><span>Fixed random state for identical-input reruns.</span></div>
+                  <div><dt>Scored population</dt><dd>Country records</dd><span>Regional and portfolio aggregates are excluded from model fitting.</span></div>
+                  <div><dt>Score interpretation</dt><dd>Batch-relative</dd><span>{run?.model_run?.score_scope ?? "Calculated within each reporting segment."}</span></div>
+                </dl>
+                <section className="model-feature-register">
+                  <header><span>Input register</span><b>{run?.model_run?.features.length ?? "—"} variables</b></header>
+                  <ol>
+                    {run?.model_run?.features.map((feature) => <li key={feature}>{label(feature)}</li>)}
+                  </ol>
+                </section>
               </div>
-              <div className="feature-register">
-                <span>Model features · {run?.model_run?.features.length ?? "—"}</span>
-                <div>
-                  {run?.model_run?.features.map((feature) => (
-                    <i key={feature}>{label(feature)}</i>
-                  ))}
-                </div>
-              </div>
-              <div className="policy-callout">
-                <strong>Decision policy</strong>
-                <span>Machine-learning output cannot receive critical severity without an independent control signal.</span>
-              </div>
+              <aside className="decision-note"><strong>Severity safeguard</strong><p>Machine-learning output cannot receive critical severity without corroboration from an independent control.</p></aside>
             </article>
 
             <article className="quality-resources">
