@@ -1061,29 +1061,32 @@ export default function Dashboard() {
                 >
                   <header className="record-modal-header">
                     <div>
-                      <span className={`severity-pill ${selected.severity}`}>{selected.severity}</span>
-                      <p>Alert #{selected.row_id}</p>
+                      <p>Financial integrity review</p>
+                      <span>Record {selected.row_id}</span>
                     </div>
                     <button aria-label="Close record details" onClick={() => setRecordModalOpen(false)}>×</button>
                   </header>
                   <div className="record-modal-body">
                     <div className="record-modal-title">
-                      <p>{selected.region} · {selected.time_period} · {selected.category}</p>
+                      <p>{selected.region}</p>
                       <h2 id="record-modal-title">{selected.country}</h2>
+                      <dl>
+                        <div><dt>Reporting period</dt><dd>{selected.time_period}</dd></div>
+                        <div><dt>Financing measure</dt><dd>{selected.category}</dd></div>
+                        <div><dt>Review priority</dt><dd className={`priority-text ${selected.severity}`}>{selected.severity}</dd></div>
+                      </dl>
                     </div>
                     <div className="modal-amount-comparison">
                       <div><span>Current amount</span><strong>{formatMoney(selected.current_amount_usd_m)}</strong></div>
-                      <i aria-hidden="true">compared with</i>
                       <div><span>Comparable prior</span><strong>{formatMoney(selected.comparison_amount_usd_m)}</strong></div>
-                      <b className={Number(selected.change_percent) >= 0 ? "up" : "down"}>{formatPercent(selected.change_percent)}</b>
+                      <div><span>Period change</span><strong className={Number(selected.change_percent) >= 0 ? "up" : "down"}>{formatPercent(selected.change_percent)}</strong></div>
                     </div>
                     <div className="modal-detail-grid">
                       <section>
-                        <h3>Why this record was flagged</h3>
+                        <h3>Control findings</h3>
                         <div className="reason-list">
                           {split(selected.reason_codes).map((reason, index) => (
                             <article key={reason}>
-                              <i>{String(index + 1).padStart(2, "0")}</i>
                               <div><strong>{label(reason)}</strong><span>{split(selected.messages)[index] ?? selected.messages}</span></div>
                             </article>
                           ))}
@@ -1092,24 +1095,23 @@ export default function Dashboard() {
                       <section>
                         <div className="section-title">
                           <h3>Control evidence</h3>
-                          {selected.corroborated === "True" && <span className="corroborated">Corroborated</span>}
+                          {selected.corroborated === "True" && <span className="evidence-status">Corroborated</span>}
                         </div>
                         <div className="evidence-box">{split(selected.evidence).map((item) => <p key={item}>{item}</p>)}</div>
-                        <div className="mini-metrics">
-                          <div><span>ML score</span><strong>{selected.anomaly_score ? Number(selected.anomaly_score).toFixed(2) : "N/A"}</strong></div>
-                          <div><span>Materiality</span><strong>{Math.round(Number(selected.materiality_percentile) * 100)}th pct.</strong></div>
-                          <div><span>Detectors</span><strong>{selected.detector_count}</strong></div>
-                        </div>
+                        <dl className="evidence-register">
+                          <div><dt>ML score</dt><dd>{selected.anomaly_score ? Number(selected.anomaly_score).toFixed(2) : "N/A"}</dd></div>
+                          <div><dt>Materiality</dt><dd>{Math.round(Number(selected.materiality_percentile) * 100)}th percentile</dd></div>
+                          <div><dt>Independent detectors</dt><dd>{selected.detector_count}</dd></div>
+                        </dl>
                       </section>
                     </div>
                     <section className="modal-recommendation">
-                      <span>Recommended action</span>
+                      <h3>Next review step</h3>
                       <p>{split(selected.recommended_actions)[0]}</p>
                     </section>
                   </div>
                   <footer className="record-modal-actions">
-                    <span>The analyst form remains open beside the alert queue.</span>
-                    <button onClick={() => setRecordModalOpen(false)}>Continue review</button>
+                    <button onClick={() => setRecordModalOpen(false)}>Return to analyst review</button>
                   </footer>
                 </section>
               </div>
