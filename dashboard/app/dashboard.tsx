@@ -563,16 +563,16 @@ export default function Dashboard() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">IDA financial operations</p>
+            <p className="eyebrow">IDA commitments and disbursements</p>
             <h1>
               {panel === "alerts"
-                ? "Financial integrity, at development scale."
-                : "Transparent controls. Accountable models."}
+                ? "Financial data review"
+                : "Model performance and control evidence"}
             </h1>
             <p className="mission-line">
               {panel === "alerts"
-                ? "Monitor commitments and disbursements before unusual records reach downstream reporting."
-                : "Evaluate how data, rules, statistics, and machine learning work together to protect report quality."}
+                ? "Review unusual commitment and disbursement records, document supporting evidence, and record an auditable decision."
+                : "Inspect detector coverage, evaluation results, model configuration, and completed analyst reviews."}
             </p>
           </div>
           <div className={`run-status ${pipelineState.tone}`}>
