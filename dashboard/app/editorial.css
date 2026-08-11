@@ -1521,3 +1521,166 @@
 @media (max-width: 760px) {
   .app-shell .analysis-brief { margin-bottom: 38px; }
 }
+
+/* V8 model-quality rhythm: remove implicit grid rows that created empty bands. */
+.app-shell .quality-grid { margin-top: 36px; }
+
+.app-shell .quality-card,
+.app-shell .quality-card:nth-child(n),
+.app-shell .hero-quality,
+.app-shell .evidence-readiness,
+.app-shell .control-coverage,
+.app-shell .review-evidence,
+.app-shell .model-run-card {
+  padding-top: 32px;
+  padding-bottom: 40px;
+}
+
+.app-shell .hero-quality { display: block; }
+
+.app-shell .hero-quality .quality-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.app-shell .hero-quality > .quality-statline,
+.app-shell .hero-quality > .validation-matrix,
+.app-shell .hero-quality > .quality-caveat { max-width: 1040px; }
+
+.app-shell .hero-quality .assurance-label {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.app-shell .quality-statline {
+  gap: 22px;
+  margin: 8px 0 23px;
+}
+
+.app-shell .quality-statline span,
+.app-shell .matrix-header,
+.app-shell .matrix-row,
+.app-shell .quality-caveat,
+.app-shell .evidence-readiness > p,
+.app-shell .confidence-legend,
+.app-shell .detector-bars,
+.app-shell .coverage-metrics span,
+.app-shell .outcome-list,
+.app-shell .evidence-note p { font-size: 11px; }
+
+.app-shell .evidence-readiness {
+  display: grid;
+  grid-template-columns: minmax(260px, .72fr) minmax(420px, 1.35fr);
+  grid-template-areas: "intro progress" "intro confidence";
+  gap: 18px clamp(42px, 7vw, 96px);
+  align-items: start;
+}
+
+.app-shell .evidence-readiness > .eyebrow,
+.app-shell .evidence-readiness > .readiness-title,
+.app-shell .evidence-readiness > p {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.app-shell .evidence-readiness > .eyebrow { grid-area: intro; }
+.app-shell .evidence-readiness > .readiness-title {
+  grid-area: intro;
+  margin-top: 25px;
+}
+.app-shell .evidence-readiness > p {
+  grid-area: intro;
+  margin-top: 82px;
+  max-width: 360px;
+}
+.app-shell .evidence-readiness > .readiness-progress {
+  grid-area: progress;
+  align-self: center;
+  margin-top: 12px;
+}
+.app-shell .evidence-readiness > .confidence-summary {
+  grid-area: confidence;
+  margin-top: 0;
+}
+
+.app-shell .control-coverage,
+.app-shell .review-evidence {
+  grid-template-columns: minmax(260px, .72fr) minmax(460px, 1.35fr);
+  gap: 18px clamp(42px, 7vw, 96px);
+  align-items: start;
+}
+
+.app-shell .control-coverage > .detector-bars,
+.app-shell .review-evidence > .outcome-list { grid-row: auto; }
+
+.app-shell .coverage-metrics {
+  margin-top: 2px;
+  padding-top: 14px;
+}
+
+.app-shell .evidence-note {
+  margin-top: 2px;
+  padding-top: 14px;
+}
+
+.app-shell .model-run-card > .quality-heading { padding: 18px 0 14px; }
+
+.app-shell .model-documentation {
+  gap: clamp(34px, 5vw, 68px);
+  padding-top: 22px;
+}
+
+.app-shell .model-specification > div {
+  min-height: 0;
+  grid-template-columns: 170px 125px minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 2px;
+}
+
+.app-shell .model-specification dt,
+.app-shell .model-specification span,
+.app-shell .model-feature-register header,
+.app-shell .model-feature-register li,
+.app-shell .decision-note strong,
+.app-shell .decision-note p { font-size: 11px; }
+
+.app-shell .model-feature-register ol { padding-top: 5px; }
+.app-shell .model-feature-register li { padding: 8px 2px; }
+
+.app-shell .decision-note {
+  margin-top: 20px;
+  padding: 13px 2px;
+}
+
+.app-shell .quality-resources {
+  margin-top: 0;
+  padding-top: 18px;
+  padding-bottom: 4px;
+}
+
+@media (max-width: 900px) {
+  .app-shell .evidence-readiness,
+  .app-shell .control-coverage,
+  .app-shell .review-evidence { display: block; }
+
+  .app-shell .evidence-readiness > .readiness-title,
+  .app-shell .evidence-readiness > p,
+  .app-shell .evidence-readiness > .readiness-progress,
+  .app-shell .evidence-readiness > .confidence-summary { margin-top: 14px; }
+
+  .app-shell .hero-quality .quality-heading { display: block; }
+
+  .app-shell .hero-quality .assurance-label {
+    display: inline-block;
+    margin: 0 0 20px;
+  }
+}
+
+@media (max-width: 680px) {
+  .app-shell .model-specification > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
