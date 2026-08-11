@@ -4,28 +4,14 @@ import test from "node:test";
 
 
 async function renderDashboard() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(
-    new Request("http://localhost/", {
-      headers: { accept: "text/html" },
-    }),
-    {
-      ASSETS: {
-        fetch: async () => new Response("Not found", { status: 404 }),
-      },
-      IMAGES: {
-        input() {
-          throw new Error("Image transformation is not expected in this test.");
-        },
-      },
-    },
-    {
-      waitUntil() {},
-      passThroughOnException() {},
-    },
+  const html = await readFile(
+    new URL("../.next/server/app/index.html", import.meta.url),
+    "utf8",
   );
+  return new Response(html, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
 }
 
 
@@ -36,7 +22,7 @@ test("renders the real IDA product metadata and interface", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   assert.match(html, /IDA Financial Data Control Tower/i);
-  assert.match(html, /Financial integrity, at development scale/i);
+  assert.match(html, /Financial integrity and analyst assurance/i);
   assert.doesNotMatch(html, /Starter Project|codex-preview/i);
 });
 

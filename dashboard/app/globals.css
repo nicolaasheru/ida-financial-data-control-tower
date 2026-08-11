@@ -1616,7 +1616,7 @@ td {
 }
 
 html, body { background: var(--canvas); }
-body { font-family: var(--font-open-sans), "Segoe UI", Arial, sans-serif; }
+body { font-family: "Segoe UI", Arial, Helvetica, sans-serif; }
 .app-shell { display: block; }
 
 .institutional-header { position: relative; z-index: 20; background: #fff; box-shadow: 0 1px 0 #c9d8e3; }

@@ -546,8 +546,8 @@ export default function Dashboard() {
             </span>
           </button>
           <div className="prototype-identity">
-            <span>Independent prototype</span>
-            <a href="https://financesone.worldbank.org/ida-commitments-and-disbursements-country-economy-summary/DS01557" target="_blank" rel="noreferrer">Public data source</a>
+            <span>Independent prototype · Built with public World Bank data</span>
+            <a href="https://financesone.worldbank.org/ida-commitments-and-disbursements-country-economy-summary/DS01557" target="_blank" rel="noreferrer">View source ↗</a>
           </div>
         </div>
         <nav className="primary-navigation" aria-label="Primary navigation">
@@ -557,7 +557,7 @@ export default function Dashboard() {
           </div>
           <span>IDA commitments and disbursements · DS01557</span>
         </nav>
-        <div className="independence-notice"><strong>Independent project</strong> This prototype is not affiliated with, endorsed by, or operated by the World Bank Group.</div>
+        <div className="independence-notice">Independent project · Not affiliated with, endorsed by, or operated by the World Bank Group.</div>
       </header>
 
       <section className="workspace">
@@ -585,37 +585,44 @@ export default function Dashboard() {
 
         {panel === "alerts" ? (
           <>
-            <section className="metrics">
-              <div className="summary-lead">
-                <span>Portfolio coverage</span>
+            <section className="portfolio-snapshot" aria-label="Portfolio review snapshot">
+              <div className="coverage-statement">
+                <span>Records monitored</span>
                 <strong>{run ? number.format(run.source_records) : "—"}</strong>
-                <small>
+                <p>
                   {run
-                    ? `${number.format(run.periods)} reporting periods · ${number.format(run.countries)} entities`
-                    : "Dataset coverage unavailable"}
-                </small>
+                    ? `Across ${number.format(run.periods)} reporting periods and ${number.format(run.countries)} entities.`
+                    : "Dataset coverage unavailable."}
+                </p>
               </div>
-              <dl className="summary-register">
+              <dl className="snapshot-facts">
                 <div>
-                  <dt>Open alerts</dt>
+                  <dt>Need analyst attention</dt>
                   <dd>{alerts.length ? liveReviewSummary.open : "—"}</dd>
-                  <small><b className="critical-text">{alerts.length ? liveReviewSummary.openBySeverity.critical : "—"} critical</b> · {alerts.length ? liveReviewSummary.openBySeverity.high : "—"} high</small>
+                  <small><b className="critical-text">{alerts.length ? liveReviewSummary.openBySeverity.critical : "—"} critical</b> and {alerts.length ? liveReviewSummary.openBySeverity.high : "—"} high priority</small>
                 </div>
                 <div>
-                  <dt>Independent corroboration</dt>
+                  <dt>Corroborated</dt>
                   <dd>{run?.corroborated_alerts ?? "—"}</dd>
-                  <small>Records flagged by multiple detector families</small>
+                  <small>Flagged by more than one detector family</small>
                 </div>
                 <div>
-                  <dt>Completed reviews</dt>
-                  <dd>{alerts.length ? liveReviewSummary.resolved : "—"}<em> / {alerts.length ? liveReviewSummary.sampleSize : "—"}</em></dd>
+                  <dt>Reviewed</dt>
+                  <dd>{alerts.length ? liveReviewSummary.resolved : "—"}<em> of {alerts.length ? liveReviewSummary.sampleSize : "—"}</em></dd>
                   <small>{alerts.length ? liveReviewSummary.needsMoreInformation : "—"} cases still need evidence</small>
                 </div>
               </dl>
             </section>
 
-            <section className="visual-grid">
-              <article className="visual-card trend-card">
+            <section className="analysis-brief">
+              <header className="analysis-heading">
+                <p>Operational picture</p>
+                <h2>Where review attention is accumulating</h2>
+                <span>Signals are shown together to support triage, not as isolated performance widgets.</span>
+              </header>
+
+              <div className="analysis-layout">
+              <article className="trend-card">
                 <div className="visual-heading">
                   <div>
                     <p className="eyebrow">Alert trend</p>
@@ -655,7 +662,8 @@ export default function Dashboard() {
                 <p className="chart-note">Annual observations only · alert count, not financial loss</p>
               </article>
 
-              <article className="visual-card region-card">
+              <aside className="analysis-rail">
+              <article className="region-card">
                 <div className="visual-heading">
                   <div>
                     <p className="eyebrow">Geographic concentration</p>
@@ -678,27 +686,7 @@ export default function Dashboard() {
                 </div>
               </article>
 
-              <article className="visual-card agreement-card">
-                <div className="visual-heading">
-                  <div>
-                    <p className="eyebrow">Detector agreement</p>
-                    <h2>How independent controls intersect</h2>
-                  </div>
-                  <strong className="highlight-number">{run?.corroborated_alerts ?? "—"} corroborated</strong>
-                </div>
-                <div className="agreement-bars">
-                  {agreementData.map((item) => (
-                    <div key={item.name} className={item.name.includes("+") ? "agreed" : ""}>
-                      <span>{item.name}</span>
-                      <div><i style={{ width: `${(item.value / maxAgreement) * 100}%` }} /></div>
-                      <strong>{item.value}</strong>
-                    </div>
-                  ))}
-                </div>
-                <p className="chart-note">Corroboration means at least two detector families flagged the same record.</p>
-              </article>
-
-              <article className="visual-card funnel-card">
+              <article className="funnel-card">
                 <div className="visual-heading">
                   <div>
                     <p className="eyebrow">Review funnel</p>
@@ -735,6 +723,28 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <p className="chart-note">Precision rates remain suppressed until 10 cases are resolved.</p>
+              </article>
+              </aside>
+              </div>
+
+              <article className="agreement-card">
+                <div className="visual-heading">
+                  <div>
+                    <p className="eyebrow">Detector agreement</p>
+                    <h2>How independent controls intersect</h2>
+                  </div>
+                  <strong className="highlight-number">{run?.corroborated_alerts ?? "—"} corroborated</strong>
+                </div>
+                <div className="agreement-bars">
+                  {agreementData.map((item) => (
+                    <div key={item.name} className={item.name.includes("+") ? "agreed" : ""}>
+                      <span>{item.name}</span>
+                      <div><i style={{ width: `${(item.value / maxAgreement) * 100}%` }} /></div>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
+                </div>
+                <p className="chart-note">Corroboration means at least two detector families flagged the same record.</p>
               </article>
             </section>
 
@@ -792,24 +802,25 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.slice(0, 80).map((alert) => (
+                      {filtered.slice(0, 80).map((alert, index) => (
                         <tr
                           key={alert.record_key}
                           className={selected?.record_key === alert.record_key ? "selected" : ""}
                           tabIndex={0}
                           onClick={() => {
                             setSelectedId(alert.record_key);
-                            setRecordModalOpen(true);
                           }}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
                               setSelectedId(alert.record_key);
-                              setRecordModalOpen(true);
                             }
                           }}
                         >
-                          <td><span className={`severity-pill ${alert.severity}`}>{alert.severity}</span></td>
+                          <td>
+                            <span className="case-index">{String(index + 1).padStart(2, "0")}</span>
+                            <span className={`severity-pill ${alert.severity}`}>{alert.severity}</span>
+                          </td>
                           <td>
                             <strong>{alert.country}</strong>
                             <span>{alert.time_period} · {alert.category}</span>
@@ -837,10 +848,10 @@ export default function Dashboard() {
                 <aside className="detail-panel">
                   <div className="detail-top">
                     <div>
-                      <p className="eyebrow">Analyst workspace</p>
+                      <p className="eyebrow">Selected alert</p>
                       <span className={`severity-pill ${selected.severity}`}>{selected.severity}</span>
                     </div>
-                    <button className="open-record-button" onClick={() => setRecordModalOpen(true)}>View full record</button>
+                    <button className="open-record-button" onClick={() => setRecordModalOpen(true)}>Open case file ↗</button>
                   </div>
                   <p className="eyebrow">Alert #{selected.row_id}</p>
                   <h2>{selected.country}</h2>
@@ -860,50 +871,6 @@ export default function Dashboard() {
                       {formatPercent(selected.change_percent)}
                     </b>
                   </div>
-
-                  <section className="detail-section">
-                    <h3>Why this was flagged</h3>
-                    <div className="reason-list">
-                      {split(selected.reason_codes).map((reason, index) => (
-                        <article key={reason}>
-                          <i>{index + 1}</i>
-                          <div>
-                            <strong>{label(reason)}</strong>
-                            <span>{split(selected.messages)[index] ?? selected.messages}</span>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-
-                  <section className="detail-section">
-                    <div className="section-title">
-                      <h3>Control evidence</h3>
-                      {selected.corroborated === "True" && <span className="corroborated">Corroborated</span>}
-                    </div>
-                    <div className="evidence-box">
-                      {split(selected.evidence).map((item) => <p key={item}>{item}</p>)}
-                    </div>
-                    <div className="mini-metrics">
-                      <div>
-                        <span>ML score</span>
-                        <strong>{selected.anomaly_score ? Number(selected.anomaly_score).toFixed(2) : "N/A"}</strong>
-                      </div>
-                      <div>
-                        <span>Materiality</span>
-                        <strong>{Math.round(Number(selected.materiality_percentile) * 100)}th pct.</strong>
-                      </div>
-                      <div>
-                        <span>Detectors</span>
-                        <strong>{selected.detector_count}</strong>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="detail-section">
-                    <h3>Recommended action</h3>
-                    <p className="recommended">{split(selected.recommended_actions)[0]}</p>
-                  </section>
 
                   <section className="review-card review-workbench">
                     <div className="section-title">
@@ -1286,9 +1253,13 @@ export default function Dashboard() {
               <p>An independent financial-data engineering prototype for explainable detection, evidence review, and auditable analyst decisions.</p>
               <span>Designed and engineered by Nicolaas Heru Dreandachrista.</span>
             </div>
-            <div><strong>Explore</strong><button onClick={() => setPanel("alerts")}>Alert operations</button><button onClick={() => setPanel("quality")}>Model &amp; data quality</button></div>
-            <div><strong>Evidence</strong><a href="https://financesone.worldbank.org/ida-commitments-and-disbursements-country-economy-summary/DS01557" target="_blank" rel="noreferrer">Public dataset</a><a href="https://github.com/nicolaasheru/ida-financial-data-control-tower" target="_blank" rel="noreferrer">Source code</a></div>
-            <div><strong>Creator</strong><a href="https://nicolaasheru.com" target="_blank" rel="noreferrer">Portfolio</a><a href="https://linkedin.com/in/nicolaasheru" target="_blank" rel="noreferrer">LinkedIn</a><a href="mailto:nicolaasherud@gmail.com">Contact</a></div>
+            <nav className="footer-links" aria-label="Footer navigation">
+              <button onClick={() => setPanel("alerts")}>Alert operations</button>
+              <button onClick={() => setPanel("quality")}>Model and data quality</button>
+              <a href="https://financesone.worldbank.org/ida-commitments-and-disbursements-country-economy-summary/DS01557" target="_blank" rel="noreferrer">Public dataset</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower" target="_blank" rel="noreferrer">Source code</a>
+              <a href="https://nicolaasheru.com" target="_blank" rel="noreferrer">Portfolio</a>
+            </nav>
           </div>
           <div className="footer-legal">
             <span>© 2026 Nicolaas Heru Dreandachrista</span>
