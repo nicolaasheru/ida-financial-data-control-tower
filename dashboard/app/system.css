@@ -33,7 +33,16 @@ a { color: inherit; }
     radial-gradient(circle at 8% 72%, rgba(83,157,135,.08), transparent 22%),
     var(--canvas);
 }
-.institutional-header { background: var(--paper); }
+.institutional-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  isolation: isolate;
+  background: rgba(255,255,255,.93);
+  box-shadow: 0 8px 28px rgba(14,47,67,.08), 0 1px 0 rgba(67,100,117,.14);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
 .brand-bar {
   min-height: 68px;
   display: flex;
@@ -58,9 +67,10 @@ a { color: inherit; }
   align-items: center;
   justify-content: space-between;
   padding: 0 clamp(24px, 5vw, 80px);
-  background: #fbfcfc;
+  background: rgba(251,252,252,.82);
   box-shadow: 0 1px 0 rgba(39, 75, 96, .16);
 }
+.quality-card[id] { scroll-margin-top: 132px; }
 .primary-navigation > div { display: flex; height: 46px; }
 .primary-navigation button { padding: 0 24px; border: 0; background: transparent; color: #466273; font-size: 14px; font-weight: 600; }
 .primary-navigation button:first-child { padding-left: 0; }
