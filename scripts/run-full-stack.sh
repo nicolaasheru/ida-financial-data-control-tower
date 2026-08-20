@@ -28,4 +28,4 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cd dashboard
-npm run dev
+npm run dev -- --port 3000

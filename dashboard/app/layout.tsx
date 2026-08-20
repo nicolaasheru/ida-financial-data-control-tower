@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import "./globals.css";
-import "./editorial.css";
+import "./system.css";
 
 export const metadata: Metadata = {
   title: "IDA Financial Data Control Tower",

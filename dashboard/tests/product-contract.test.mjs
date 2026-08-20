@@ -102,12 +102,13 @@ test("model-quality view exposes governance evidence and live configuration", as
     ),
   );
 
-  assert.match(source, /Evaluation robustness/i);
-  assert.match(source, /Sensitivity calibration/i);
-  assert.match(source, /Detection coverage versus analyst workload/i);
-  assert.match(source, /Evidence readiness/i);
-  assert.match(source, /Human-review evidence/i);
-  assert.match(source, /Current model run/i);
+  assert.match(source, /Control assurance/i);
+  assert.match(source, /Why 1% is the provisional threshold/i);
+  assert.match(source, /Evidence limitations/i);
+  assert.match(source, /Current analyst findings/i);
+  assert.match(source, /Model configuration and safeguard/i);
+  assert.match(source, /webglearth\.com/i);
+  assert.match(source, /Geographic exposure/i);
   assert.match(source, /Machine-learning output cannot receive critical severity/i);
   assert.match(source, /Azure target architecture/i);
   assert.equal(run.model_run.algorithm, "IsolationForest");

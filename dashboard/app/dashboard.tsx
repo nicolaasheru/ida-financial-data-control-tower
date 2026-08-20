@@ -1,6 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+
+type WebGlobe = {
+  setView: (coordinates: [number, number], zoom: number) => void;
+};
+
+type WebGlobeLayer = { addTo: (globe: WebGlobe) => void };
+type WebGlobeMarker = {
+  addTo: (globe: WebGlobe) => WebGlobeMarker;
+  bindPopup?: (html: string, options?: { maxWidth?: number }) => void;
+};
+
+declare global {
+  interface Window {
+    WE?: {
+      map: (elementId: string, options?: Record<string, unknown>) => WebGlobe;
+      tileLayer: (url: string, options?: Record<string, unknown>) => WebGlobeLayer;
+      marker: (coordinates: [number, number], iconUrl?: string, width?: number, height?: number) => WebGlobeMarker;
+    };
+  }
+}
 
 const PAGE_LOADED_AT = Date.now();
 
@@ -196,11 +216,111 @@ function formatPercent(value: string) {
 function label(value: string) {
   return value
     .replaceAll("_", " ")
+    .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function split(value: string) {
   return value.split(" | ").filter(Boolean);
+}
+
+const COUNTRY_COORDINATES: Record<string, [number, number]> = {
+  Afghanistan: [33.94, 67.71], Bhutan: [27.51, 90.43],
+  "Central African Republic": [6.61, 20.94], "Congo, Republic of": [-0.23, 15.83],
+  Guinea: [9.95, -9.70], Honduras: [15.20, -86.24], Kenya: [-0.02, 37.91],
+  Kosovo: [42.60, 20.90], Liberia: [6.43, -9.43], Malawi: [-13.25, 34.30],
+  Mauritania: [21.01, -10.94], Nepal: [28.39, 84.12], Nigeria: [9.08, 8.68],
+  Somalia: [5.15, 46.20], "South Sudan": [6.88, 31.31], Tanzania: [-6.37, 34.89],
+  Ukraine: [48.38, 31.17], Uzbekistan: [41.38, 64.59], "Yemen, Republic of": [15.55, 48.52],
+};
+
+type GeographicExposure = {
+  name: string;
+  alerts: number;
+  critical: number;
+  amount: number;
+};
+
+function GeographicGlobe({ data, onSelect }: { data: GeographicExposure[]; onSelect: (country: string) => void }) {
+  const globeId = `ida-globe-${useId().replaceAll(":", "-")}`;
+  const initialized = useRef(false);
+  const [globeState, setGlobeState] = useState<"loading" | "ready" | "unavailable">("loading");
+
+  useEffect(() => {
+    if (!data.length || initialized.current) return;
+    const testCanvas = document.createElement("canvas");
+    if (!testCanvas.getContext("webgl") && !testCanvas.getContext("experimental-webgl")) {
+      const fallbackTimer = window.setTimeout(() => setGlobeState("unavailable"), 0);
+      return () => window.clearTimeout(fallbackTimer);
+    }
+    let cancelled = false;
+    const renderGlobe = () => {
+      const globeElement = document.getElementById(globeId);
+      if (cancelled || initialized.current || !window.WE || !globeElement) return;
+      initialized.current = true;
+      const globe = window.WE.map(globeId, { sky: false, atmosphere: true, dragging: true, tilting: false });
+      window.WE.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 6,
+      }).addTo(globe);
+      globe.setView([14, 27], 2.05);
+      data.forEach((item) => {
+        const coordinates = COUNTRY_COORDINATES[item.name];
+        if (!coordinates) return;
+        const color = item.critical > 0 ? "#b43b45" : "#a96522";
+        const markerSize = 16 + Math.min(item.alerts, 4) * 3;
+        const markerIcon = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="${markerSize}" height="${markerSize}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="${color}" stroke="white" stroke-width="3"/></svg>`,
+        )}`;
+        const marker = window.WE!.marker(coordinates, markerIcon, markerSize, markerSize).addTo(globe);
+        if (marker?.bindPopup) marker.bindPopup(`<strong>${item.name}</strong><br>${item.alerts} priority alert${item.alerts === 1 ? "" : "s"}<br>$${item.amount.toFixed(1)}M affected`, { maxWidth: 180 });
+      });
+      setGlobeState("ready");
+    };
+
+    if (window.WE) renderGlobe();
+    else {
+      const existing = document.querySelector<HTMLScriptElement>('script[data-webgl-earth="true"]');
+      if (existing) existing.addEventListener("load", renderGlobe, { once: true });
+      else {
+        const script = document.createElement("script");
+        script.src = "https://www.webglearth.com/v2/api.js";
+        script.async = true;
+        script.dataset.webglEarth = "true";
+        script.addEventListener("load", renderGlobe, { once: true });
+        document.head.appendChild(script);
+      }
+    }
+    return () => { cancelled = true; };
+  }, [data, globeId]);
+
+  return (
+    <div className="geographic-story">
+      <div className="globe-stage" aria-label="Interactive globe showing priority alert exposure by country">
+        <div id={globeId} className={`globe-canvas ${globeState === "unavailable" ? "hidden" : ""}`} />
+        {globeState === "loading" && <div className="globe-fallback">Loading geographic exposure…</div>}
+        {globeState === "unavailable" && (
+          <div className="globe-static">
+            <strong>Country exposure remains available</strong>
+            <span>The interactive globe requires WebGL. Use the ranked country list to filter the review queue.</span>
+          </div>
+        )}
+        {globeState === "ready" && <p className="globe-instruction">Drag to explore · select a country from the list to filter the queue</p>}
+      </div>
+      <ol className="country-ranking">
+        {data.slice(0, 5).map((item, index) => (
+          <li key={item.name}>
+            <button onClick={() => onSelect(item.name)}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <strong>{item.name}</strong>
+              <em>{item.alerts} alert{item.alerts === 1 ? "" : "s"}</em>
+              <small>{formatMoney(String(item.amount))}</small>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -215,6 +335,7 @@ export default function Dashboard() {
   const [selectedId, setSelectedId] = useState("");
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [sort, setSort] = useState<"priority" | "materiality" | "amount">("priority");
+  const [queuePage, setQueuePage] = useState(0);
   const [panel, setPanel] = useState<"alerts" | "quality">("alerts");
   const [liveReview, setLiveReview] = useState<ReviewRecord | null>(null);
   const [reviewHistory, setReviewHistory] = useState<ReviewEvent[]>([]);
@@ -231,24 +352,54 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
+    let active = true;
     Promise.all([
-      fetch("/data/alerts.csv").then((response) => response.text()),
-      fetch("/data/run_summary.json").then((response) => response.json()),
-      fetch("/data/evaluation_summary.json").then((response) => response.json()),
-      fetch("/data/review_summary.json").then((response) => response.json()),
-      fetch(`${REVIEW_API_URL}/api/reviews`)
-        .then((response) => {
-          if (!response.ok) throw new Error("Review API unavailable");
-          return response.json() as Promise<ReviewRecord[]>;
-        })
-        .catch(() => [] as ReviewRecord[]),
+      fetch("/data/alerts.csv").then((response) => {
+        if (!response.ok) throw new Error("Alert data unavailable");
+        return response.text();
+      }),
+      fetch("/data/run_summary.json").then((response) => {
+        if (!response.ok) throw new Error("Run summary unavailable");
+        return response.json();
+      }),
+      fetch("/data/evaluation_summary.json").then((response) => {
+        if (!response.ok) throw new Error("Evaluation summary unavailable");
+        return response.json();
+      }),
+      fetch("/data/review_summary.json").then((response) => {
+        if (!response.ok) throw new Error("Review summary unavailable");
+        return response.json();
+      }),
     ])
-      .then(([csv, runData, evaluationData, reviewData, persistedReviews]) => {
+      .then(([csv, runData, evaluationData, reviewData]) => {
+        if (!active) return;
         const parsed = parseCsv(csv);
+        setAlerts(parsed);
+        setSelectedId(parsed[0]?.record_key ?? "");
+        setRun(runData);
+        setEvaluation(evaluationData);
+        setReview(reviewData);
+        setDataLoadError(false);
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error("Core dashboard data failed to load", error);
+        setDataLoadError(true);
+      });
+
+    const reviewController = new AbortController();
+    const reviewTimeout = window.setTimeout(() => reviewController.abort(), 2500);
+    fetch(`${REVIEW_API_URL}/api/reviews`, { signal: reviewController.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("Review API unavailable");
+        return response.json() as Promise<ReviewRecord[]>;
+      })
+      .then((persistedReviews) => {
+        if (!active || !Array.isArray(persistedReviews)) return;
         const reviewsById = new Map(
           persistedReviews.map((record) => [record.record_key, record]),
         );
-        const hydrated = parsed.map((alert) => {
+        setAlerts((currentAlerts) => currentAlerts.map((alert) => {
           const persisted = reviewsById.get(alert.record_key);
           return persisted
             ? {
@@ -262,15 +413,16 @@ export default function Dashboard() {
                 evidence_url: persisted.evidence_url,
               }
             : alert;
-        });
-        setAlerts(hydrated);
-        setSelectedId(hydrated[0]?.record_key ?? "");
-        setRun(runData);
-        setEvaluation(evaluationData);
-        setReview(reviewData);
-        setDataLoadError(false);
+        }));
       })
-      .catch(() => setDataLoadError(true));
+      .catch(() => setReviewApiStatus("offline"))
+      .finally(() => window.clearTimeout(reviewTimeout));
+
+    return () => {
+      active = false;
+      window.clearTimeout(reviewTimeout);
+      reviewController.abort();
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -300,6 +452,9 @@ export default function Dashboard() {
 
   const selected =
     alerts.find((alert) => alert.record_key === selectedId) ?? filtered[0];
+  const queuePageSize = 14;
+  const queuePageCount = Math.max(Math.ceil(filtered.length / queuePageSize), 1);
+  const visibleAlerts = filtered.slice(queuePage * queuePageSize, (queuePage + 1) * queuePageSize);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -457,9 +612,6 @@ export default function Dashboard() {
       },
     };
   }, [alerts, review]);
-  const resolvedRate = liveReviewSummary.sampleSize
-    ? Math.round((liveReviewSummary.resolved / liveReviewSummary.sampleSize) * 100)
-    : 0;
   const runAgeDays = run
     ? (PAGE_LOADED_AT - new Date(run.run_timestamp_utc).getTime()) / 86_400_000
     : null;
@@ -508,20 +660,23 @@ export default function Dashboard() {
       .map(([name, values]) => ({ name, ...values, total: values.critical + values.high + values.medium }));
   }, [alerts]);
 
-  const regionalData = useMemo(() => {
-    const regions = new Map<string, { critical: number; high: number; amount: number }>();
-    alerts.forEach((alert) => {
-      const current = regions.get(alert.region) ?? { critical: 0, high: 0, amount: 0 };
-      if (alert.severity === "critical") current.critical += 1;
-      if (alert.severity === "high") current.high += 1;
-      if (alert.severity !== "medium") current.amount += Math.abs(Number(alert.current_amount_usd_m) || 0);
-      regions.set(alert.region, current);
-    });
-    return [...regions.entries()]
-      .map(([name, values]) => ({ name, ...values, total: values.critical + values.high }))
-      .filter((item) => item.total > 0)
-      .sort((a, b) => b.total - a.total || b.amount - a.amount)
-      .slice(0, 6);
+  const geographicExposure = useMemo(() => {
+    const countries = new Map<string, GeographicExposure>();
+    alerts
+      .filter((alert) => alert.severity === "critical" || alert.severity === "high")
+      .forEach((alert) => {
+        const current = countries.get(alert.country) ?? {
+          name: alert.country,
+          alerts: 0,
+          critical: 0,
+          amount: 0,
+        };
+        current.alerts += 1;
+        if (alert.severity === "critical") current.critical += 1;
+        current.amount += Math.abs(Number(alert.change_amount_usd_m) || Number(alert.current_amount_usd_m) || 0);
+        countries.set(alert.country, current);
+      });
+    return [...countries.values()].sort((a, b) => b.alerts - a.alerts || b.amount - a.amount);
   }, [alerts]);
 
   const agreementData = useMemo(() => {
@@ -549,7 +704,6 @@ export default function Dashboard() {
   }, [alerts]);
 
   const maxTrend = Math.max(...trendData.map((item) => item.total), 1);
-  const maxRegion = Math.max(...regionalData.map((item) => item.total), 1);
   const maxAgreement = Math.max(...agreementData.map((item) => item.value), 1);
 
   return (
@@ -565,7 +719,7 @@ export default function Dashboard() {
           </button>
           <div className="prototype-identity">
             <span>Independent prototype · Built with public World Bank data</span>
-            <a href="https://financesone.worldbank.org/ida-commitments-and-disbursements-country-economy-summary/DS01557" target="_blank" rel="noreferrer">View source ↗</a>
+            <a href="https://financesone.worldbank.org/ida-commitments-and-disbursements-country-economy-summary/DS01557" target="_blank" rel="noreferrer">View source</a>
           </div>
         </div>
         <nav className="primary-navigation" aria-label="Primary navigation">
@@ -581,12 +735,24 @@ export default function Dashboard() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">IDA commitments and disbursements</p>
             <h1>
               {panel === "alerts"
-                ? "Financial data review"
-                : "Model performance and control evidence"}
+                ? "Financial control review"
+                : "How the control system performs"}
             </h1>
+            <p className="topbar-dek">
+              {panel === "alerts"
+                ? "IDA commitments and disbursements · exceptions prioritized for analyst action"
+                : "Threshold decisions, control coverage and the evidence still required"}
+            </p>
+            {panel === "alerts" && (
+              <div className="hero-actions">
+                <button onClick={() => document.querySelector(".operations")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                  Review priority alerts
+                </button>
+                <small>{alerts.length ? liveReviewSummary.open : "—"} open · {alerts.length ? liveReviewSummary.openBySeverity.critical : "—"} critical</small>
+              </div>
+            )}
           </div>
           <div className={`run-status ${pipelineState.tone}`}>
             <i />
@@ -604,20 +770,19 @@ export default function Dashboard() {
         {panel === "alerts" ? (
           <>
             <section className="portfolio-snapshot" aria-label="Portfolio review snapshot">
-              <div className="coverage-statement">
-                <span>Records monitored</span>
-                <strong>{run ? number.format(run.source_records) : "—"}</strong>
-                <p>
-                  {run
-                    ? `Across ${number.format(run.periods)} reporting periods and ${number.format(run.countries)} entities.`
-                    : "Dataset coverage unavailable."}
-                </p>
+              <div className="portfolio-priority">
+                <div>
+                  <h2><strong>{alerts.length ? liveReviewSummary.open : "—"}</strong><span>records require analyst attention</span></h2>
+                  <p>
+                    Including <b>{alerts.length ? liveReviewSummary.openBySeverity.critical : "—"} critical</b> exceptions across {run ? number.format(run.source_records) : "—"} monitored records.
+                  </p>
+                </div>
               </div>
               <dl className="snapshot-facts">
                 <div>
-                  <dt>Need analyst attention</dt>
-                  <dd>{alerts.length ? liveReviewSummary.open : "—"}</dd>
-                  <small><b className="critical-text">{alerts.length ? liveReviewSummary.openBySeverity.critical : "—"} critical</b> and {alerts.length ? liveReviewSummary.openBySeverity.high : "—"} high priority</small>
+                  <dt>Portfolio coverage</dt>
+                  <dd>{run ? number.format(run.source_records) : "—"}</dd>
+                  <small>{run ? `${number.format(run.countries)} entities · ${number.format(run.periods)} reporting periods` : "Dataset coverage unavailable"}</small>
                 </div>
                 <div>
                   <dt>Corroborated</dt>
@@ -634,17 +799,15 @@ export default function Dashboard() {
 
             <section className="analysis-brief">
               <header className="analysis-heading">
-                <p>Operational picture</p>
-                <h2>Where review attention is accumulating</h2>
-                <span>Signals are shown together to support triage, not as isolated performance widgets.</span>
+                <h2>Where intervention is needed</h2>
+                <span>Three views explain when exceptions arise, where financial exposure concentrates and whether independent controls agree.</span>
               </header>
 
               <div className="analysis-layout">
               <article className="trend-card">
                 <div className="visual-heading">
                   <div>
-                    <p className="eyebrow">Alert trend</p>
-                    <h2>Where exceptions concentrate over time</h2>
+                    <h3>Exceptions by reporting period</h3>
                   </div>
                   <div className="chart-legend">
                     <span><i className="critical-key" /> Critical</span>
@@ -677,6 +840,10 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
+                <aside className="trend-insight">
+                  <strong>FY25 carries the largest review volume.</strong>
+                  <p>Most alerts are medium severity; critical exceptions remain concentrated in a small number of reporting periods.</p>
+                </aside>
                 <p className="chart-note">Annual observations only · alert count, not financial loss</p>
               </article>
 
@@ -684,63 +851,42 @@ export default function Dashboard() {
               <article className="region-card">
                 <div className="visual-heading">
                   <div>
-                    <p className="eyebrow">Geographic concentration</p>
-                    <h2>Priority alerts by region</h2>
+                    <h3>Geographic exposure</h3>
+                    <p>Priority alerts mapped to the countries requiring attention.</p>
                   </div>
-                  <span className="chart-unit">Critical + high</span>
                 </div>
-                <div className="region-bars">
-                  {regionalData.map((item) => (
-                    <div className="region-row" key={item.name}>
-                      <span title={item.name}>{item.name}</span>
-                      <div className="region-track">
-                        <i className="critical-region" style={{ width: `${(item.critical / maxRegion) * 100}%` }} />
-                        <i className="high-region" style={{ width: `${(item.high / maxRegion) * 100}%` }} />
-                      </div>
-                      <strong>{item.total}</strong>
-                      <small>{formatMoney(String(item.amount))}</small>
-                    </div>
-                  ))}
-                </div>
+                <GeographicGlobe data={geographicExposure} onSelect={(country) => {
+                  setQuery(country);
+                  document.querySelector(".operations")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }} />
               </article>
 
               <article className="funnel-card">
                 <div className="visual-heading">
                   <div>
-                    <p className="eyebrow">Review funnel</p>
-                    <h2>From detection to disposition</h2>
+                    <h3>Review progress</h3>
+                    <p>How the generated alert population moves through analyst validation.</p>
                   </div>
-                  <span className="chart-unit">Current review cycle</span>
                 </div>
-                <div className="funnel">
-                  <div className="funnel-step">
-                    <strong>{run?.alerts ?? "—"}</strong>
-                    <span>Alerts generated</span>
-                  </div>
-                  <b>→</b>
-                  <div className="funnel-step sampled">
-                    <strong>{review?.sample_size ?? "—"}</strong>
-                    <span>Sampled for review</span>
-                  </div>
-                  <b>→</b>
-                  <div className="funnel-step resolved">
-                    <strong>{alerts.length ? liveReviewSummary.resolved : "—"}</strong>
-                    <span>Cases resolved</span>
-                  </div>
+                <div className="review-progress-flow">
+                  <div><strong>{run?.alerts ?? "—"}</strong><span>Alerts detected</span><small>Full exception queue</small></div>
+                  <div><strong>{review?.sample_size ?? "—"}</strong><span>Selected for review</span><small>Priority sample</small></div>
+                  <div className="progress-active"><strong>{alerts.length ? liveReviewSummary.resolved : "—"}</strong><span>Reviews completed</span><small>Final dispositions</small></div>
+                </div>
+                <div className="review-progress-track" aria-label={`${liveReviewSummary.resolved} of ${review?.sample_size ?? 0} sampled alerts resolved`}>
+                  <i style={{ width: `${Math.min((liveReviewSummary.resolved / (review?.sample_size || 1)) * 100, 100)}%` }} />
                 </div>
                 <div className="funnel-outcomes">
                   <div>
-                    <i className="legitimate-outcome" />
-                    <span>Legitimate exceptions</span>
                     <strong>{alerts.length ? liveReviewSummary.legitimateExceptions : "—"}</strong>
+                    <span>Completed: legitimate exception</span>
                   </div>
                   <div>
-                    <i className="unresolved-outcome" />
-                    <span>Need more information</span>
                     <strong>{alerts.length ? liveReviewSummary.needsMoreInformation : "—"}</strong>
+                    <span>Open: evidence still required</span>
                   </div>
                 </div>
-                <p className="chart-note">Precision rates remain suppressed until 10 cases are resolved.</p>
+                <p className="chart-note">Complete 10 final dispositions before publishing precision or false-positive rates.</p>
               </article>
               </aside>
               </div>
@@ -748,8 +894,7 @@ export default function Dashboard() {
               <article className="agreement-card">
                 <div className="visual-heading">
                   <div>
-                    <p className="eyebrow">Detector agreement</p>
-                    <h2>How independent controls intersect</h2>
+                    <h3>Detector corroboration</h3>
                   </div>
                   <strong className="highlight-number">{run?.corroborated_alerts ?? "—"} corroborated</strong>
                 </div>
@@ -770,38 +915,37 @@ export default function Dashboard() {
               <div className="queue-panel">
                 <div className="panel-heading">
                   <div>
-                    <p className="eyebrow">Prioritized queue</p>
                     <h2>Alerts requiring review</h2>
+                    <p>Ordered by severity, corroboration and financial materiality.</p>
                   </div>
                   <span>{filtered.length} results</span>
                 </div>
                 <div className="filters">
                   <label className="search">
-                    <span>⌕</span>
                     <input
                       value={query}
-                      onChange={(event) => setQuery(event.target.value)}
+                      onChange={(event) => { setQuery(event.target.value); setQueuePage(0); }}
                       placeholder="Search country, region or reason"
                     />
                   </label>
-                  <select value={severity} onChange={(event) => setSeverity(event.target.value)}>
+                  <select value={severity} onChange={(event) => { setSeverity(event.target.value); setQueuePage(0); }}>
                     <option value="all">All severities</option>
                     <option value="critical">Critical</option>
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
                   </select>
-                  <select value={period} onChange={(event) => setPeriod(event.target.value)}>
+                  <select value={period} onChange={(event) => { setPeriod(event.target.value); setQueuePage(0); }}>
                     <option value="all">All periods</option>
                     <option value="annual">Annual</option>
                     <option value="quarterly">Quarterly</option>
                   </select>
-                  <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value)}>
+                  <select value={reviewStatus} onChange={(event) => { setReviewStatus(event.target.value); setQueuePage(0); }}>
                     <option value="all">All review states</option>
                     <option value="pending">Pending</option>
                     <option value="in_review">In review</option>
                     <option value="resolved">Resolved</option>
                   </select>
-                  <select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>
+                  <select value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setQueuePage(0); }}>
                     <option value="priority">Sort: priority</option>
                     <option value="materiality">Sort: materiality</option>
                     <option value="amount">Sort: amount</option>
@@ -820,7 +964,7 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.slice(0, 80).map((alert, index) => (
+                      {visibleAlerts.map((alert, index) => (
                         <tr
                           key={alert.record_key}
                           className={selected?.record_key === alert.record_key ? "selected" : ""}
@@ -836,7 +980,7 @@ export default function Dashboard() {
                           }}
                         >
                           <td>
-                            <span className="case-index">{String(index + 1).padStart(2, "0")}</span>
+                            <span className="case-index">{String(queuePage * queuePageSize + index + 1).padStart(2, "0")}</span>
                             <span className={`severity-pill ${alert.severity}`}>{alert.severity}</span>
                           </td>
                           <td>
@@ -860,27 +1004,45 @@ export default function Dashboard() {
                     </tbody>
                   </table>
                 </div>
+                <div className="queue-pagination">
+                  <span>Page {queuePage + 1} of {queuePageCount} · {filtered.length} alerts</span>
+                  <div>
+                    <button disabled={queuePage === 0} onClick={() => setQueuePage((page) => Math.max(page - 1, 0))}>Previous</button>
+                    <button disabled={queuePage >= queuePageCount - 1} onClick={() => setQueuePage((page) => Math.min(page + 1, queuePageCount - 1))}>Next</button>
+                  </div>
+                </div>
               </div>
 
               {selected && (
                 <aside className="detail-panel">
                   <div className="detail-top">
                     <div>
-                      <p className="eyebrow">Selected alert</p>
+                      <p className="record-context">Selected alert</p>
                       <span className={`severity-pill ${selected.severity}`}>{selected.severity}</span>
                     </div>
-                    <button className="open-record-button" onClick={() => setRecordModalOpen(true)}>Open case file ↗</button>
+                    <button className="open-record-button" onClick={() => setRecordModalOpen(true)}>Open case file</button>
                   </div>
-                  <p className="eyebrow">Alert #{selected.row_id}</p>
-                  <h2>{selected.country}</h2>
+                  <p className="record-context">Alert #{selected.row_id} · {selected.country}</p>
+                  <h2>{label(split(selected.reason_codes)[0] ?? "Control exception")}</h2>
                   <p className="detail-subtitle">{selected.region} · {selected.time_period} · {selected.category}</p>
+
+                  <section className="control-brief">
+                    <p>{split(selected.messages)[0] ?? selected.messages}</p>
+                    <strong>Recommended action</strong>
+                    <p>{split(selected.recommended_actions)[0]}</p>
+                  </section>
+
+                  <div className="case-path" aria-label="Case review workflow">
+                    <span className="complete"><b>1</b>Signal detected</span>
+                    <span className="active"><b>2</b>Validate evidence</span>
+                    <span><b>3</b>Record decision</span>
+                  </div>
 
                   <div className="amount-comparison">
                     <div>
                       <span>Current amount</span>
                       <strong>{formatMoney(selected.current_amount_usd_m)}</strong>
                     </div>
-                    <div className="change-arrow">→</div>
                     <div>
                       <span>Comparable prior</span>
                       <strong>{formatMoney(selected.comparison_amount_usd_m)}</strong>
@@ -892,7 +1054,10 @@ export default function Dashboard() {
 
                   <section className="review-card review-workbench">
                     <div className="section-title">
-                      <h3>Analyst review</h3>
+                      <div>
+                        <p className="review-kicker">Review workspace</p>
+                        <h3>Analyst review</h3>
+                      </div>
                       <div className="review-card-status">
                         <span className={`api-state ${reviewApiStatus}`}>
                           {reviewApiStatus === "online" ? "Live" : reviewApiStatus === "offline" ? "Read only" : "Connecting"}
@@ -904,18 +1069,21 @@ export default function Dashboard() {
                     </div>
                     {reviewApiStatus === "offline" ? (
                       selected.review_notes ? (
-                      <>
+                      <div className="recorded-review">
                         <p>{selected.review_notes}</p>
                         <div className="review-meta">
                           <span>Outcome <strong>{label(selected.review_outcome)}</strong></span>
                           <span>Confidence <strong>{label(selected.review_confidence)}</strong></span>
                         </div>
                         {selected.evidence_url && (
-                          <a href={selected.evidence_url} target="_blank" rel="noreferrer">Open supporting evidence ↗</a>
+                          <a href={selected.evidence_url} target="_blank" rel="noreferrer">Open supporting evidence</a>
                         )}
-                      </>
+                      </div>
                       ) : (
-                        <p>No review has been recorded. Start the review API to enable analyst updates.</p>
+                        <div className="review-service-note">
+                          <strong>Review service unavailable</strong>
+                          <p>No decision has been recorded for this alert. Start the review API to enable analyst updates.</p>
+                        </div>
                       )
                     ) : liveReview ? (
                       <div className="review-editor">
@@ -1021,7 +1189,7 @@ export default function Dashboard() {
                             {reviewHistory.slice(0, 4).map((event) => (
                               <div key={event.event_id}>
                                 <span>{event.actor}</span>
-                                <p>{label(event.previous_status)} → {label(event.new_status)}</p>
+                                <p>{label(event.previous_status)} to {label(event.new_status)}</p>
                                 <time>{new Date(event.created_at).toLocaleString()}</time>
                               </div>
                             ))}
@@ -1104,11 +1272,40 @@ export default function Dashboard() {
           </>
         ) : (
           <section className="quality-grid">
-            <article className="quality-card hero-quality">
+            <nav className="quality-overview" aria-label="Model quality chapters">
+              <div>
+                <h2>Three questions guide assurance</h2>
+                <p>Start with the operating choice, verify the controls, then assess whether the evidence is sufficient to publish performance rates.</p>
+              </div>
+              <div className="quality-chapter-links">
+                <button onClick={() => document.querySelector("#operating-decision")?.scrollIntoView({ behavior: "smooth" })}>
+                  <span>01</span><strong>Operating decision</strong><small>Is the threshold practical?</small>
+                </button>
+                <button onClick={() => document.querySelector("#control-assurance")?.scrollIntoView({ behavior: "smooth" })}>
+                  <span>02</span><strong>Control assurance</strong><small>Do safeguards behave as intended?</small>
+                </button>
+                <button onClick={() => document.querySelector("#evidence-limitations")?.scrollIntoView({ behavior: "smooth" })}>
+                  <span>03</span><strong>Evidence limitations</strong><small>What remains unproven?</small>
+                </button>
+              </div>
+            </nav>
+            <section className="quality-landscape" aria-label="Assurance at a glance">
+              <header>
+                <span>Assurance at a glance</span>
+                <h2>Strong control behavior.<br />Incomplete production evidence.</h2>
+                <p>The system detects every controlled test fault, while analyst outcomes remain below the publication threshold.</p>
+              </header>
+              <div className="quality-vitals">
+                <article><strong>1%</strong><span>Provisional operating threshold</span></article>
+                <article><strong>{evaluation?.detected_trials ?? "—"}/{evaluation?.trials ?? "—"}</strong><span>Controlled trials detected</span></article>
+                <article><strong>{liveReviewSummary.resolved}/{review?.minimum_resolved_for_rate ?? "—"}</strong><span>Final dispositions completed</span></article>
+              </div>
+            </section>
+            <article id="control-assurance" className="quality-card hero-quality">
               <div className="quality-heading">
                 <div>
-                  <p className="eyebrow">Evaluation robustness</p>
-                  <h2>Controls tested beyond one hand-picked record</h2>
+                  <h2>Control assurance</h2>
+                  <p className="section-dek">What the control system can detect, how it was tested and where independent safeguards apply.</p>
                 </div>
                 <span className="assurance-label">Control harness · not production accuracy</span>
               </div>
@@ -1119,40 +1316,43 @@ export default function Dashboard() {
                 <div><strong>{evaluation ? `${Math.round(evaluation.minimum_seed_recall * 100)}%` : "—"}</strong><span>Minimum run recall</span></div>
               </div>
               {evaluation && (
-                <div className="validation-matrix">
-                  <div className="matrix-header">
-                    <span>Failure mode</span>
-                    {evaluation.seeds.map((seed) => <b key={seed}>S{seed}</b>)}
-                    <b>Recall</b>
-                  </div>
-                  {Object.entries(evaluation.recall_by_scenario).map(([scenario, recall]) => (
-                    <div className="matrix-row" key={scenario}>
-                      <span>{label(scenario)}</span>
-                      {evaluation.seeds.map((seed) => {
-                        const result = evaluation.outcomes.find(
-                          (outcome) => outcome.seed === seed && outcome.injection === scenario,
-                        );
-                        return (
-                          <i
-                            key={seed}
-                            className={result?.detected ? "passed" : "failed"}
-                            title={`Seed ${seed}: ${result?.detected ? "detected" : "not detected"}`}
-                          />
-                        );
-                      })}
-                      <strong>{Math.round(recall * 100)}%</strong>
+                <details className="method-disclosure">
+                  <summary>View failure-mode test results</summary>
+                  <div className="validation-matrix">
+                    <div className="matrix-header">
+                      <span>Failure mode</span>
+                      {evaluation.seeds.map((seed) => <b key={seed}>S{seed}</b>)}
+                      <b>Recall</b>
                     </div>
-                  ))}
-                </div>
+                    {Object.entries(evaluation.recall_by_scenario).map(([scenario, recall]) => (
+                      <div className="matrix-row" key={scenario}>
+                        <span>{label(scenario)}</span>
+                        {evaluation.seeds.map((seed) => {
+                          const result = evaluation.outcomes.find(
+                            (outcome) => outcome.seed === seed && outcome.injection === scenario,
+                          );
+                          return (
+                            <i
+                              key={seed}
+                              className={result?.detected ? "passed" : "failed"}
+                              title={`Seed ${seed}: ${result?.detected ? "detected" : "not detected"}`}
+                            />
+                          );
+                        })}
+                        <strong>{Math.round(recall * 100)}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               )}
               <p className="quality-caveat">{evaluation?.method_note}</p>
             </article>
 
-            <article className="quality-card sensitivity-calibration">
+            <article id="operating-decision" className="quality-card sensitivity-calibration">
               <div className="quality-heading">
                 <div>
-                  <p className="eyebrow">Sensitivity calibration</p>
-                  <h2>Detection coverage versus analyst workload</h2>
+                  <h2>Operating decision</h2>
+                  <p className="section-dek">Why 1% is the provisional threshold and what that choice means for severe-spike recall and analyst workload.</p>
                 </div>
                 <span className="calibration-status">
                   {evaluation?.sensitivity_analysis.status ?? "—"} operating point
@@ -1160,48 +1360,42 @@ export default function Dashboard() {
               </div>
               {evaluation?.sensitivity_analysis && (
                 <>
-                  <div className="calibration-table-wrap">
-                    <table className="calibration-table">
-                      <thead>
-                        <tr>
-                          <th>Contamination</th>
-                          <th>ML alerts</th>
-                          <th>Total queue</th>
-                          <th>Queue rate</th>
-                          <th>5× spike recall</th>
-                          <th>10× spike recall</th>
-                          <th>Workload Δ</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {evaluation.sensitivity_analysis.grid.map((row) => (
-                          <tr className={row.selected ? "selected" : ""} key={row.contamination}>
-                            <td>
-                              <strong>{(row.contamination * 100).toFixed(row.contamination < 0.01 ? 1 : 0)}%</strong>
-                              {row.selected && <span>Operating</span>}
-                            </td>
-                            <td>{number.format(row.ml_alerts)}</td>
-                            <td>{number.format(row.total_alerts)}</td>
-                            <td>{(row.alert_rate * 100).toFixed(1)}%</td>
-                            <td>{Math.round(row.moderate_spike_recall * 100)}%</td>
-                            <td>{Math.round(row.severe_spike_recall * 100)}%</td>
-                            <td>{row.alert_change_vs_selected > 0 ? "+" : ""}{number.format(row.alert_change_vs_selected)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
                   <div className="calibration-decision">
                     <strong>Threshold decision</strong>
                     <p>{evaluation.sensitivity_analysis.selection_rationale}</p>
                   </div>
+                  <details className="method-disclosure">
+                    <summary>Compare all tested thresholds</summary>
+                    <div className="calibration-table-wrap">
+                      <table className="calibration-table">
+                        <thead>
+                          <tr>
+                            <th>Contamination</th><th>ML alerts</th><th>Total queue</th><th>Queue rate</th>
+                            <th>5× spike recall</th><th>10× spike recall</th><th>Workload Δ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {evaluation.sensitivity_analysis.grid.map((row) => (
+                            <tr className={row.selected ? "selected" : ""} key={row.contamination}>
+                              <td><strong>{(row.contamination * 100).toFixed(row.contamination < 0.01 ? 1 : 0)}%</strong>{row.selected && <span>Operating</span>}</td>
+                              <td>{number.format(row.ml_alerts)}</td><td>{number.format(row.total_alerts)}</td>
+                              <td>{(row.alert_rate * 100).toFixed(1)}%</td><td>{Math.round(row.moderate_spike_recall * 100)}%</td>
+                              <td>{Math.round(row.severe_spike_recall * 100)}%</td>
+                              <td>{row.alert_change_vs_selected > 0 ? "+" : ""}{number.format(row.alert_change_vs_selected)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
                   <p className="quality-caveat">{evaluation.sensitivity_analysis.method_note}</p>
                 </>
               )}
             </article>
 
-            <article className="quality-card evidence-readiness">
-              <p className="eyebrow">Evidence readiness</p>
+            <article id="evidence-limitations" className="quality-card evidence-readiness">
+              <h2>Evidence limitations</h2>
+              <p className="section-dek">Why precision and false-positive rates remain suppressed—and what evidence must be completed first.</p>
               <div className="readiness-title">
                 <h2>{liveReviewSummary.resolved} of {review?.minimum_resolved_for_rate ?? "—"}</h2>
                 <span className={liveReviewSummary.resolved >= (review?.minimum_resolved_for_rate ?? Infinity) ? "unlocked" : "locked"}>
@@ -1238,8 +1432,8 @@ export default function Dashboard() {
             <article className="quality-card control-coverage">
               <div className="quality-heading">
                 <div>
-                  <p className="eyebrow">Control coverage</p>
-                  <h2>{totalSignals} detector signals</h2>
+                  <h2>Detector coverage</h2>
+                  <p className="section-dek">{totalSignals} signals generated across rule, statistical and machine-learning controls.</p>
                 </div>
                 <strong className="coverage-rate">{Math.round(controlCoverage.corroborationRate * 100)}% corroborated</strong>
               </div>
@@ -1260,8 +1454,8 @@ export default function Dashboard() {
             </article>
 
             <article className="quality-card review-evidence">
-              <p className="eyebrow">Human-review evidence</p>
-              <h2>What analysts concluded</h2>
+              <h2>Current analyst findings</h2>
+              <p className="section-dek">Current dispositions from the manual-review sample.</p>
               <div className="outcome-list">
                 <div><span>Legitimate exceptions</span><strong>{liveReviewSummary.legitimateExceptions}</strong></div>
                 <div><span>Confirmed data issues</span><strong>{liveReviewSummary.confirmedDataIssues}</strong></div>
@@ -1280,39 +1474,40 @@ export default function Dashboard() {
             <article className="quality-card model-run-card">
               <div className="quality-heading">
                 <div>
-                  <p className="eyebrow">Current model run</p>
-                  <h2>{run?.model_run?.algorithm ?? "Model configuration unavailable"}</h2>
+                  <h2>Model configuration and safeguard</h2>
+                  <p className="section-dek">{run?.model_run?.algorithm ?? "Model configuration unavailable"}</p>
                 </div>
                 <span className="model-version">
                   {run ? new Date(run.run_timestamp_utc).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                 </span>
               </div>
-              <div className="model-documentation">
-                <dl className="model-specification">
-                  <div><dt>Segmentation</dt><dd>4 segments</dd><span>Annual and quarterly records, separated by commitments and disbursements.</span></div>
-                  <div><dt>Estimator configuration</dt><dd>{run?.model_run?.n_estimators ?? "—"} trees</dd><span>Independent ensemble fitted within each segment.</span></div>
-                  <div><dt>Contamination assumption</dt><dd>{run?.model_run ? `${run.model_run.contamination * 100}%` : "—"}</dd><span>Provisional operating point tested against lower and higher sensitivity settings.</span></div>
-                  <div><dt>Reproducibility</dt><dd>Seed {run?.model_run?.random_state ?? "—"}</dd><span>Fixed random state for identical-input reruns.</span></div>
-                  <div><dt>Scored population</dt><dd>Country records</dd><span>Regional and portfolio aggregates are excluded from model fitting.</span></div>
-                  <div><dt>Score interpretation</dt><dd>Batch-relative</dd><span>{run?.model_run?.score_scope ?? "Calculated within each reporting segment."}</span></div>
-                </dl>
-                <section className="model-feature-register">
-                  <header><span>Input register</span><b>{run?.model_run?.features.length ?? "—"} variables</b></header>
-                  <ol>
-                    {run?.model_run?.features.map((feature) => <li key={feature}>{label(feature)}</li>)}
-                  </ol>
-                </section>
-              </div>
               <aside className="decision-note"><strong>Severity safeguard</strong><p>Machine-learning output cannot receive critical severity without corroboration from an independent control.</p></aside>
+              <details className="method-disclosure model-disclosure">
+                <summary>View model specification and input register</summary>
+                <div className="model-documentation">
+                  <dl className="model-specification">
+                    <div><dt>Segmentation</dt><dd>4 segments</dd><span>Annual and quarterly records, separated by commitments and disbursements.</span></div>
+                    <div><dt>Estimator configuration</dt><dd>{run?.model_run?.n_estimators ?? "—"} trees</dd><span>Independent ensemble fitted within each segment.</span></div>
+                    <div><dt>Contamination assumption</dt><dd>{run?.model_run ? `${run.model_run.contamination * 100}%` : "—"}</dd><span>Provisional operating point tested against lower and higher sensitivity settings.</span></div>
+                    <div><dt>Reproducibility</dt><dd>Seed {run?.model_run?.random_state ?? "—"}</dd><span>Fixed random state for identical-input reruns.</span></div>
+                    <div><dt>Scored population</dt><dd>Country records</dd><span>Regional and portfolio aggregates are excluded from model fitting.</span></div>
+                    <div><dt>Score interpretation</dt><dd>Batch-relative</dd><span>{run?.model_run?.score_scope ?? "Calculated within each reporting segment."}</span></div>
+                  </dl>
+                  <section className="model-feature-register">
+                    <header><span>Input register</span><b>{run?.model_run?.features.length ?? "—"} variables</b></header>
+                    <ol>{run?.model_run?.features.map((feature) => <li key={feature}>{label(feature)}</li>)}</ol>
+                  </section>
+                </div>
+              </details>
             </article>
 
             <article className="quality-resources">
               <span>Assurance documentation</span>
-              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/model_card.md" target="_blank" rel="noreferrer">Model card ↗</a>
-              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/data_dictionary.md" target="_blank" rel="noreferrer">Data dictionary ↗</a>
-              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/ingestion_reliability.md" target="_blank" rel="noreferrer">Ingestion contract ↗</a>
-              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/critical_alert_review.md" target="_blank" rel="noreferrer">Critical-alert review ↗</a>
-              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/azure_target_architecture.md" target="_blank" rel="noreferrer">Azure target architecture ↗</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/model_card.md" target="_blank" rel="noreferrer">Model card</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/data_dictionary.md" target="_blank" rel="noreferrer">Data dictionary</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/ingestion_reliability.md" target="_blank" rel="noreferrer">Ingestion contract</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/critical_alert_review.md" target="_blank" rel="noreferrer">Critical-alert review</a>
+              <a href="https://github.com/nicolaasheru/ida-financial-data-control-tower/blob/main/docs/azure_target_architecture.md" target="_blank" rel="noreferrer">Azure target architecture</a>
             </article>
           </section>
         )}
