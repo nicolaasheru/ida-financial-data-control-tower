@@ -1,0 +1,41 @@
+{
+  "run_timestamp_utc": "2026-08-20T15:37:14.268794+00:00",
+  "source_records": 3420,
+  "ida_records": 3420,
+  "countries": 202,
+  "periods": 14,
+  "detector_signals": 145,
+  "alerts": 118,
+  "corroborated_alerts": 5,
+  "reviewed_alerts": 27,
+  "resolved_alerts": 4,
+  "alerts_by_severity": {
+    "medium": 97,
+    "high": 17,
+    "critical": 4
+  },
+  "alerts_by_detector": {
+    "statistical_process_control": 58,
+    "rule": 53,
+    "isolation_forest": 34
+  },
+  "model_run": {
+    "algorithm": "IsolationForest",
+    "segments": "period_type \u00d7 category; country records only",
+    "features": [
+      "log1p_total",
+      "development_policy_share",
+      "investment_lending_share",
+      "others_share",
+      "program_for_results_share",
+      "relative_change",
+      "year_over_year_change",
+      "disbursement_commitment_ratio",
+      "quarter"
+    ],
+    "n_estimators": 300,
+    "contamination": 0.01,
+    "random_state": 42,
+    "score_scope": "batch-relative within each segment"
+  }
+}
