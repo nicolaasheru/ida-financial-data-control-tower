@@ -1,6 +1,6 @@
 import unittest
 
-from src.evaluate import inject_controlled_anomalies
+from src.evaluate import evaluate_sensitivity, inject_controlled_anomalies
 from src.ingest import load_raw
 
 
@@ -46,6 +46,20 @@ class EvaluationRobustnessTests(unittest.TestCase):
         self.assertIn("TOTAL_MISMATCH", expected_codes)
         self.assertIn("YEAR_OVER_YEAR_SHIFT", expected_codes)
         self.assertIn("MULTIVARIATE_ANOMALY", expected_codes)
+
+    def test_sensitivity_grid_reports_recall_and_workload(self):
+        rows = evaluate_sensitivity(
+            self.source,
+            seeds=(11,),
+            contamination_grid=(0.01, 0.02),
+        )
+        self.assertEqual([row["contamination"] for row in rows], [0.01, 0.02])
+        self.assertTrue(rows[0]["selected"])
+        self.assertGreater(rows[1]["ml_alerts"], rows[0]["ml_alerts"])
+        self.assertIn("controlled_fault_recall", rows[0])
+        self.assertIn("moderate_spike_recall", rows[0])
+        self.assertIn("severe_spike_recall", rows[0])
+        self.assertIn("alert_change_vs_selected", rows[0])
 
 
 if __name__ == "__main__":

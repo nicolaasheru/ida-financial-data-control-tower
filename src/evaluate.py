@@ -8,7 +8,11 @@ import numpy as np
 import pandas as pd
 
 from .config import ARTIFACT_DIR, COMPONENT_COLUMNS
-from .detect import detect_isolation_forest, detect_statistical
+from .detect import (
+    ISOLATION_FOREST_CONTAMINATION,
+    detect_isolation_forest,
+    detect_statistical,
+)
 from .features import engineer_features
 from .ingest import load_raw
 from .validate import validate_and_clean
@@ -16,6 +20,7 @@ from .validate import validate_and_clean
 
 EVALUATION_FILE = ARTIFACT_DIR / "evaluation_summary.json"
 DEFAULT_EVALUATION_SEEDS = (11, 23, 42, 73, 101)
+DEFAULT_CONTAMINATION_GRID = (0.005, 0.01, 0.02, 0.05)
 
 LAYER_BY_CODE = {
     "INVALID_AMOUNT": "structural_or_financial_rule",
@@ -121,7 +126,12 @@ def inject_controlled_anomalies(
     return df, labels
 
 
-def evaluate_seed(source: pd.DataFrame, seed: int) -> list[dict]:
+def evaluate_seed(
+    source: pd.DataFrame,
+    seed: int,
+    *,
+    contamination: float = ISOLATION_FOREST_CONTAMINATION,
+) -> list[dict]:
     injected, labels = inject_controlled_anomalies(
         source,
         random_state=seed,
@@ -129,7 +139,10 @@ def evaluate_seed(source: pd.DataFrame, seed: int) -> list[dict]:
     validation = validate_and_clean(injected)
     features = engineer_features(validation.clean)
     statistical = detect_statistical(features)
-    ml_alerts, _ = detect_isolation_forest(features)
+    ml_alerts, _ = detect_isolation_forest(
+        features,
+        contamination=contamination,
+    )
     frames = [
         frame
         for frame in [validation.alerts, statistical, ml_alerts]
@@ -153,7 +166,124 @@ def evaluate_seed(source: pd.DataFrame, seed: int) -> list[dict]:
     return outcomes
 
 
-def evaluate(seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS) -> dict:
+def evaluate_sensitivity(
+    source: pd.DataFrame,
+    *,
+    seeds: Sequence[int],
+    contamination_grid: Sequence[float] = DEFAULT_CONTAMINATION_GRID,
+) -> list[dict]:
+    """Compare model sensitivity and resulting analyst workload.
+
+    Controlled injections provide recall evidence. Alert volumes are measured on
+    the untouched source. Neither measure is presented as production precision.
+    """
+    if not contamination_grid:
+        raise ValueError("At least one contamination value is required.")
+
+    validation = validate_and_clean(source)
+    features = engineer_features(validation.clean)
+    statistical = detect_statistical(features)
+    spike_targets = {}
+    for seed in seeds:
+        _, labels = inject_controlled_anomalies(source, random_state=int(seed))
+        spike_targets[int(seed)] = next(
+            int(label["row_ids"][0])
+            for label in labels
+            if label["injection"] == "reconciled_historical_spike"
+        )
+    rows: list[dict] = []
+
+    for contamination in contamination_grid:
+        if not 0 < float(contamination) <= 0.5:
+            raise ValueError("Contamination values must be in (0, 0.5].")
+        machine_learning, _ = detect_isolation_forest(
+            features,
+            contamination=float(contamination),
+        )
+        baseline_frames = [
+            frame
+            for frame in [validation.alerts, statistical, machine_learning]
+            if not frame.empty
+        ]
+        baseline_alerts = pd.concat(
+            baseline_frames,
+            ignore_index=True,
+            sort=False,
+        )
+        total_alerts = int(baseline_alerts["record_key"].nunique())
+
+        outcomes = [
+            outcome
+            for seed in seeds
+            for outcome in evaluate_seed(
+                source,
+                int(seed),
+                contamination=float(contamination),
+            )
+        ]
+        detected_trials = sum(item["detected"] for item in outcomes)
+        spike_outcomes = [
+            item
+            for item in outcomes
+            if item["injection"] == "reconciled_historical_spike"
+        ]
+        ml_spike_detected = sum(
+            "MULTIVARIATE_ANOMALY" in item["observed_codes"]
+            for item in spike_outcomes
+        )
+        graduated_recall = {}
+        for multiplier in (5.0, 10.0):
+            detected = 0
+            for seed, spike_idx in spike_targets.items():
+                stressed = source.copy().reset_index(drop=True)
+                for column in [*COMPONENT_COLUMNS, "total"]:
+                    stressed.at[spike_idx, column] = (
+                        float(stressed.at[spike_idx, column]) * multiplier
+                    )
+                stressed_features = engineer_features(
+                    validate_and_clean(stressed).clean
+                )
+                stressed_alerts, _ = detect_isolation_forest(
+                    stressed_features,
+                    contamination=float(contamination),
+                )
+                detected += bool(
+                    (
+                        stressed_alerts["row_id"].eq(spike_idx)
+                        & stressed_alerts["reason_code"].eq(
+                            "MULTIVARIATE_ANOMALY"
+                        )
+                    ).any()
+                )
+            graduated_recall[f"{int(multiplier)}x"] = detected / len(seeds)
+        rows.append(
+            {
+                "contamination": float(contamination),
+                "ml_alerts": int(len(machine_learning)),
+                "total_alerts": total_alerts,
+                "alert_rate": total_alerts / len(validation.clean),
+                "controlled_fault_recall": detected_trials / len(outcomes),
+                "ml_spike_recall": ml_spike_detected / len(spike_outcomes),
+                "moderate_spike_recall": graduated_recall["5x"],
+                "severe_spike_recall": graduated_recall["10x"],
+                "selected": bool(
+                    np.isclose(contamination, ISOLATION_FOREST_CONTAMINATION)
+                ),
+            }
+        )
+
+    selected_alerts = next(
+        row["total_alerts"] for row in rows if row["selected"]
+    )
+    for row in rows:
+        row["alert_change_vs_selected"] = row["total_alerts"] - selected_alerts
+    return rows
+
+
+def evaluate(
+    seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS,
+    contamination_grid: Sequence[float] = DEFAULT_CONTAMINATION_GRID,
+) -> dict:
     if not seeds:
         raise ValueError("At least one evaluation seed is required.")
     source = load_raw(refresh=False)
@@ -183,6 +313,39 @@ def evaluate(seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS) -> dict:
         for seed, results in seed_results.items()
     }
     detected_trials = sum(item["detected"] for item in all_outcomes)
+    sensitivity = evaluate_sensitivity(
+        source,
+        seeds=seeds,
+        contamination_grid=contamination_grid,
+    )
+    selected_sensitivity = next(row for row in sensitivity if row["selected"])
+    prior_operating_point = next(
+        (row for row in sensitivity if np.isclose(row["contamination"], 0.02)),
+        None,
+    )
+    if prior_operating_point and not np.isclose(
+        selected_sensitivity["contamination"],
+        prior_operating_point["contamination"],
+    ):
+        queue_reduction = (
+            prior_operating_point["total_alerts"]
+            - selected_sensitivity["total_alerts"]
+        )
+        reduction_rate = queue_reduction / prior_operating_point["total_alerts"]
+        selection_rationale = (
+            f"Select {selected_sensitivity['contamination']:.0%} provisionally: "
+            f"it matches the former 2% setting on tested 5× and 10× spike "
+            f"recall while reducing the analyst queue by {queue_reduction} "
+            f"records ({reduction_rate:.1%}). Human-reviewed outcomes remain "
+            "necessary before production calibration."
+        )
+    else:
+        selection_rationale = (
+            f"Retain the {selected_sensitivity['contamination']:.0%} operating "
+            "point provisionally: controlled-fault recall is considered alongside "
+            "analyst workload, but resolved human reviews are not yet sufficient "
+            "to estimate precision or select a production threshold."
+        )
     summary = {
         "injections": len(scenario_results),
         "fully_detected": sum(
@@ -199,6 +362,19 @@ def evaluate(seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS) -> dict:
         "recall_by_layer": {
             layer: sum(results) / len(results)
             for layer, results in layer_results.items()
+        },
+        "sensitivity_analysis": {
+            "operating_contamination": ISOLATION_FOREST_CONTAMINATION,
+            "status": "provisional",
+            "grid": sensitivity,
+            "selection_rationale": selection_rationale,
+            "method_note": (
+                "Alert volumes use untouched source records; recall uses controlled "
+                "fault injections. Graduated tests multiply a reproducibly selected, "
+                "internally reconciled historical record by 5× and 10×. The comparison "
+                "measures sensitivity and review load, not production accuracy or "
+                "financial loss."
+            ),
         },
         "outcomes": all_outcomes,
         "method_note": (

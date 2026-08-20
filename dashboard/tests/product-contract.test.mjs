@@ -71,6 +71,21 @@ test("evaluation artifact reports multi-seed robustness", async () => {
   assert.equal(evaluation.seed_runs, 5);
   assert.equal(evaluation.trials, 25);
   assert.equal(Object.keys(evaluation.recall_by_seed).length, 5);
+  assert.equal(evaluation.sensitivity_analysis.grid.length, 4);
+  assert.equal(
+    evaluation.sensitivity_analysis.grid.filter((row) => row.selected).length,
+    1,
+  );
+  assert.ok(
+    evaluation.sensitivity_analysis.grid.every(
+      (row) => row.total_alerts > 0 && row.controlled_fault_recall >= 0,
+    ),
+  );
+  assert.ok(
+    evaluation.sensitivity_analysis.grid.every(
+      (row) => row.moderate_spike_recall >= 0 && row.severe_spike_recall >= 0,
+    ),
+  );
   assert.match(evaluation.method_note, /does not estimate production accuracy/i);
 });
 
@@ -88,6 +103,8 @@ test("model-quality view exposes governance evidence and live configuration", as
   );
 
   assert.match(source, /Evaluation robustness/i);
+  assert.match(source, /Sensitivity calibration/i);
+  assert.match(source, /Detection coverage versus analyst workload/i);
   assert.match(source, /Evidence readiness/i);
   assert.match(source, /Human-review evidence/i);
   assert.match(source, /Current model run/i);

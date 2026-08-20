@@ -32,6 +32,62 @@
     "statistical": 1.0,
     "machine_learning": 1.0
   },
+  "sensitivity_analysis": {
+    "operating_contamination": 0.01,
+    "status": "provisional",
+    "grid": [
+      {
+        "contamination": 0.005,
+        "ml_alerts": 18,
+        "total_alerts": 102,
+        "alert_rate": 0.02982456140350877,
+        "controlled_fault_recall": 1.0,
+        "ml_spike_recall": 1.0,
+        "moderate_spike_recall": 0.0,
+        "severe_spike_recall": 0.2,
+        "selected": false,
+        "alert_change_vs_selected": -16
+      },
+      {
+        "contamination": 0.01,
+        "ml_alerts": 34,
+        "total_alerts": 118,
+        "alert_rate": 0.03450292397660819,
+        "controlled_fault_recall": 1.0,
+        "ml_spike_recall": 1.0,
+        "moderate_spike_recall": 0.2,
+        "severe_spike_recall": 1.0,
+        "selected": true,
+        "alert_change_vs_selected": 0
+      },
+      {
+        "contamination": 0.02,
+        "ml_alerts": 65,
+        "total_alerts": 143,
+        "alert_rate": 0.041812865497076024,
+        "controlled_fault_recall": 1.0,
+        "ml_spike_recall": 1.0,
+        "moderate_spike_recall": 0.2,
+        "severe_spike_recall": 1.0,
+        "selected": false,
+        "alert_change_vs_selected": 25
+      },
+      {
+        "contamination": 0.05,
+        "ml_alerts": 160,
+        "total_alerts": 232,
+        "alert_rate": 0.06783625730994151,
+        "controlled_fault_recall": 1.0,
+        "ml_spike_recall": 1.0,
+        "moderate_spike_recall": 0.8,
+        "severe_spike_recall": 1.0,
+        "selected": false,
+        "alert_change_vs_selected": 114
+      }
+    ],
+    "selection_rationale": "Select 1% provisionally: it matches the former 2% setting on tested 5\u00d7 and 10\u00d7 spike recall while reducing the analyst queue by 25 records (17.5%). Human-reviewed outcomes remain necessary before production calibration.",
+    "method_note": "Alert volumes use untouched source records; recall uses controlled fault injections. Graduated tests multiply a reproducibly selected, internally reconciled historical record by 5\u00d7 and 10\u00d7. The comparison measures sensitivity and review load, not production accuracy or financial loss."
+  },
   "outcomes": [
     {
       "seed": 11,

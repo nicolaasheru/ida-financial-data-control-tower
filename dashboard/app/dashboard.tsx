@@ -73,6 +73,24 @@ type EvaluationSummary = {
     injection: string;
     detected: boolean;
   }>;
+  sensitivity_analysis: {
+    operating_contamination: number;
+    status: string;
+    grid: Array<{
+      contamination: number;
+      ml_alerts: number;
+      total_alerts: number;
+      alert_rate: number;
+      controlled_fault_recall: number;
+      ml_spike_recall: number;
+      moderate_spike_recall: number;
+      severe_spike_recall: number;
+      selected: boolean;
+      alert_change_vs_selected: number;
+    }>;
+    selection_rationale: string;
+    method_note: string;
+  };
   method_note: string;
 };
 
@@ -1130,6 +1148,58 @@ export default function Dashboard() {
               <p className="quality-caveat">{evaluation?.method_note}</p>
             </article>
 
+            <article className="quality-card sensitivity-calibration">
+              <div className="quality-heading">
+                <div>
+                  <p className="eyebrow">Sensitivity calibration</p>
+                  <h2>Detection coverage versus analyst workload</h2>
+                </div>
+                <span className="calibration-status">
+                  {evaluation?.sensitivity_analysis.status ?? "—"} operating point
+                </span>
+              </div>
+              {evaluation?.sensitivity_analysis && (
+                <>
+                  <div className="calibration-table-wrap">
+                    <table className="calibration-table">
+                      <thead>
+                        <tr>
+                          <th>Contamination</th>
+                          <th>ML alerts</th>
+                          <th>Total queue</th>
+                          <th>Queue rate</th>
+                          <th>5× spike recall</th>
+                          <th>10× spike recall</th>
+                          <th>Workload Δ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {evaluation.sensitivity_analysis.grid.map((row) => (
+                          <tr className={row.selected ? "selected" : ""} key={row.contamination}>
+                            <td>
+                              <strong>{(row.contamination * 100).toFixed(row.contamination < 0.01 ? 1 : 0)}%</strong>
+                              {row.selected && <span>Operating</span>}
+                            </td>
+                            <td>{number.format(row.ml_alerts)}</td>
+                            <td>{number.format(row.total_alerts)}</td>
+                            <td>{(row.alert_rate * 100).toFixed(1)}%</td>
+                            <td>{Math.round(row.moderate_spike_recall * 100)}%</td>
+                            <td>{Math.round(row.severe_spike_recall * 100)}%</td>
+                            <td>{row.alert_change_vs_selected > 0 ? "+" : ""}{number.format(row.alert_change_vs_selected)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="calibration-decision">
+                    <strong>Threshold decision</strong>
+                    <p>{evaluation.sensitivity_analysis.selection_rationale}</p>
+                  </div>
+                  <p className="quality-caveat">{evaluation.sensitivity_analysis.method_note}</p>
+                </>
+              )}
+            </article>
+
             <article className="quality-card evidence-readiness">
               <p className="eyebrow">Evidence readiness</p>
               <div className="readiness-title">
@@ -1221,7 +1291,7 @@ export default function Dashboard() {
                 <dl className="model-specification">
                   <div><dt>Segmentation</dt><dd>4 segments</dd><span>Annual and quarterly records, separated by commitments and disbursements.</span></div>
                   <div><dt>Estimator configuration</dt><dd>{run?.model_run?.n_estimators ?? "—"} trees</dd><span>Independent ensemble fitted within each segment.</span></div>
-                  <div><dt>Contamination assumption</dt><dd>{run?.model_run ? `${run.model_run.contamination * 100}%` : "—"}</dd><span>Initial operating threshold, pending calibration with completed reviews.</span></div>
+                  <div><dt>Contamination assumption</dt><dd>{run?.model_run ? `${run.model_run.contamination * 100}%` : "—"}</dd><span>Provisional operating point tested against lower and higher sensitivity settings.</span></div>
                   <div><dt>Reproducibility</dt><dd>Seed {run?.model_run?.random_state ?? "—"}</dd><span>Fixed random state for identical-input reruns.</span></div>
                   <div><dt>Scored population</dt><dd>Country records</dd><span>Regional and portfolio aggregates are excluded from model fitting.</span></div>
                   <div><dt>Score interpretation</dt><dd>Batch-relative</dd><span>{run?.model_run?.score_scope ?? "Calculated within each reporting segment."}</span></div>

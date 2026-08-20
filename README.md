@@ -265,6 +265,16 @@ reconciled historical spike. The spike must exercise both the statistical and ML
 layers. Detection of these selected injections does not imply 100% real-world
 accuracy.
 
+The evaluation also runs the Isolation Forest across 0.5%, 1%, 2%, and 5%
+contamination assumptions. It compares controlled-fault recall with ML and
+consolidated queue volumes on untouched records. The current 1% operating point
+remains provisional until enough human-reviewed outcomes exist to estimate
+precision and false-positive behavior; the sensitivity table is not presented
+as production accuracy. To avoid a saturated test in which every threshold
+detects only an extreme fault, the calibration view separately reports recall
+for reproducibly selected, internally reconciled historical records stressed by
+5× and 10×.
+
 The manual-review workflow estimates false-positive behavior on untouched alerts.
 Rates remain suppressed until at least ten cases are resolved. The initial
 critical-alert review is AI-assisted and based on public evidence; it is not a
