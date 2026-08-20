@@ -27,7 +27,7 @@ a { color: inherit; }
 
 .app-shell {
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 92% 23%, rgba(92,174,204,.13), transparent 24%),
     radial-gradient(circle at 8% 72%, rgba(83,157,135,.08), transparent 22%),
